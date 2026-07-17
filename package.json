@@ -1,0 +1,17 @@
+{
+  "name": "hrms",
+  "private": true,
+  "description": "HRMS Monorepo — frontend (Vite/React) + backend (Express/Prisma/PostgreSQL)",
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\""
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

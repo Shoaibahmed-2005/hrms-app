@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+frontend/.tanstack/
+frontend/.workspace/
+
+# Environment files (CRITICAL: Never commit these!)
+.env
+.env.*
+*.local
+frontend/.env
+backend/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS and Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo
