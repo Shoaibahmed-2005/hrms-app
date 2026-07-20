@@ -1,65 +1,53 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireManager } from '../middleware/auth';
 import prisma from '../../database/db';
 
 const router = Router();
 
-// Get settings
-router.get('/', requireAuth, async (req, res) => {
+// GET /settings
+router.get('/', requireAuth, async (_req, res: any) => {
   try {
-    const settings = await (prisma as any).companySetting.findFirst();
-    if (!settings) return res.json(null);
-    // Map schema fields to frontend-friendly camelCase
+    let settings = await prisma.companySetting.findFirst();
+    if (!settings) {
+      // Auto-create defaults
+      settings = await prisma.companySetting.create({ data: { id: '1' } });
+    }
     res.json({
-      companyName: settings.companyName ?? 'HRMS',
-      officeLat: settings.geofenceLat,
-      officeLng: settings.geofenceLng,
-      geofenceRadiusM: settings.geofenceRadiusM,
       shiftStart: settings.shiftStart,
       shiftEnd: settings.shiftEnd,
-      overtimeRate: settings.overtimeRate,
-      overtimeOffsetsLeave: settings.overtimeOffsetsLeave,
+      halfDayThresholdHours: settings.halfDayThresholdHours,
+      fullDayHours: settings.fullDayHours,
       faceMatchThreshold: settings.faceMatchThreshold,
     });
-  } catch (error) {
-    console.error('Fetch settings error:', error);
-    res.status(500).json({ error: 'Failed to fetch settings' });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message || 'Failed to fetch settings' });
   }
 });
 
-// Update settings
-router.put('/', requireAuth, async (req, res) => {
+// PUT /settings
+router.put('/', requireAuth, requireManager, async (req: any, res: any) => {
   try {
     const {
-      companyName, officeLat, officeLng, geofenceRadiusM,
-      shiftStart, shiftEnd, overtimeRate, overtimeOffsetsLeave,
+      shiftStart, shiftEnd, halfDayThresholdHours, fullDayHours,
       faceMatchThreshold
     } = req.body;
 
-    const existing = await (prisma as any).companySetting.findFirst();
-    let updated;
-    const data = {
-      geofenceLat: officeLat,
-      geofenceLng: officeLng,
-      geofenceRadiusM: Number(geofenceRadiusM),
-      shiftStart,
-      shiftEnd,
-      overtimeRate: Number(overtimeRate),
-      overtimeOffsetsLeave: Boolean(overtimeOffsetsLeave),
-      faceMatchThreshold: Number(faceMatchThreshold),
-    };
+    const data: any = {};
+    if (shiftStart) data.shiftStart = shiftStart;
+    if (shiftEnd) data.shiftEnd = shiftEnd;
+    if (halfDayThresholdHours !== undefined) data.halfDayThresholdHours = Number(halfDayThresholdHours);
+    if (fullDayHours !== undefined) data.fullDayHours = Number(fullDayHours);
+    if (faceMatchThreshold !== undefined) data.faceMatchThreshold = Number(faceMatchThreshold);
 
-    if (existing) {
-      updated = await (prisma as any).companySetting.update({ where: { id: existing.id }, data });
-    } else {
-      updated = await (prisma as any).companySetting.create({ data: { ...data, id: '1' } });
-    }
+    const updated = await prisma.companySetting.upsert({
+      where: { id: '1' },
+      update: data,
+      create: { id: '1', ...data }
+    });
     res.json(updated);
-  } catch (error) {
-    console.error('Update settings error:', error);
-    res.status(500).json({ error: 'Failed to update settings' });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message || 'Failed to update settings' });
   }
 });
 
 export default router;
-

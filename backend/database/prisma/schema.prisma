@@ -8,7 +8,6 @@ datasource db {
 
 enum Role {
   MANAGER
-  EMPLOYEE
 }
 
 enum EmployeeStatus {
@@ -22,128 +21,90 @@ enum AttendanceStatus {
   ABSENT
 }
 
-enum LeaveStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
 enum PayrollStatus {
   DRAFT
   FINALIZED
   PAID
 }
 
-enum FaceResetStatus {
-  PENDING
-  APPROVED
-  REJECTED
+enum PaymentType {
+  HOURLY
+  MONTHLY
 }
+
+// ── User (Manager only) ───────────────────────────────────────────────────────
 
 model User {
-  id                  String         @id @default(uuid())
-  email               String         @unique
-  passwordHash        String
-  role                Role           @default(EMPLOYEE)
-  mustResetPassword   Boolean        @default(true)
-  createdAt           DateTime       @default(now())
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  passwordHash         String
+  role                 Role           @default(MANAGER)
+  mustResetPassword    Boolean        @default(false)
+  createdAt            DateTime       @default(now())
 
-  employee            Employee?
-  reviewedLeaves      LeaveRequest[] @relation("ReviewedLeaves")
   createdAnnouncements Announcement[] @relation("CreatedAnnouncements")
-  notifications       Notification[]
+  notifications        Notification[]
 }
 
+// ── Employee (no login — manager-registered only) ─────────────────────────────
+
 model Employee {
-  id            String    @id @default(uuid())
-  userId        String    @unique
-  user          User      @relation(fields: [userId], references: [id])
-  employeeCode  String    @unique
+  id            String         @id @default(uuid())
+  employeeCode  String         @unique
   name          String
+  govtId        String?
+  address       String?
   phone         String?
   department    String
   designation   String
   dateOfJoining DateTime
-  baseSalary    Float
+  paymentType   PaymentType    @default(MONTHLY)
+  baseSalary    Float?                            // used when paymentType = MONTHLY
+  hourlyRate    Float?                            // used when paymentType = HOURLY
   reportingToId String?
-  reportingTo   Employee? @relation("ReportingTo", fields: [reportingToId], references: [id])
-  subordinates  Employee[] @relation("ReportingTo")
+  reportingTo   Employee?      @relation("ReportingTo", fields: [reportingToId], references: [id])
+  subordinates  Employee[]     @relation("ReportingTo")
   status        EmployeeStatus @default(ACTIVE)
   photoUrl      String?
 
-  faceEmbeddings     FaceEmbedding[]
-  faceResetRequests  FaceResetRequest[]
-  attendanceRecords  AttendanceRecord[]
-  leaveBalances      LeaveBalance[]
-  leaveRequests      LeaveRequest[]
-  payrollEntries     PayrollEntry[]
-  messagesSent       ChatMessage[] @relation("MessagesSent")
-  messagesReceived   ChatMessage[] @relation("MessagesReceived")
+  faceEmbeddings    FaceEmbedding[]
+  attendanceRecords AttendanceRecord[]
+  payrollEntries    PayrollEntry[]
 }
+
+// ── Face ──────────────────────────────────────────────────────────────────────
 
 model FaceEmbedding {
   id              String   @id @default(uuid())
   employeeId      String
-  employee        Employee @relation(fields: [employeeId], references: [id])
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   embeddingVector Float[]
   createdAt       DateTime @default(now())
 }
 
+// ── Attendance ────────────────────────────────────────────────────────────────
+
 model AttendanceRecord {
-  id              String   @id @default(uuid())
-  employeeId      String
-  employee        Employee @relation(fields: [employeeId], references: [id])
-  date            DateTime @db.Date
-  checkInTime     DateTime?
-  checkOutTime    DateTime?
-  checkInLat      Float?
-  checkInLng      Float?
-  faceMatchScore  Float?
-  status          AttendanceStatus @default(ABSENT)
-  hoursWorked     Float?
-  isManualOverride Boolean @default(false)
-  overrideReason  String?
+  id             String           @id @default(uuid())
+  employeeId     String
+  employee       Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date           DateTime         @db.Date
+  checkInTime    DateTime?
+  checkOutTime   DateTime?
+  checkInLat     Float?
+  checkInLng     Float?
+  faceMatchScore Float?
+  status         AttendanceStatus @default(ABSENT)
+  hoursWorked    Float?
+  isHalfDay      Boolean          @default(false)
+  dailyEarnings  Float?           // computed on check-out
+  extraWages     Float?           // extra pay assigned by manager for this day
+  notes          String?
 
   @@unique([employeeId, date])
 }
 
-model LeaveType {
-  id                String   @id @default(uuid())
-  name              String   @unique
-  defaultAnnualDays Int
-
-  leaveBalances     LeaveBalance[]
-  leaveRequests     LeaveRequest[]
-}
-
-model LeaveBalance {
-  id          String    @id @default(uuid())
-  employeeId  String
-  employee    Employee  @relation(fields: [employeeId], references: [id])
-  leaveTypeId String
-  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
-  balanceDays Float
-  year        Int
-
-  @@unique([employeeId, leaveTypeId, year])
-}
-
-model LeaveRequest {
-  id          String      @id @default(uuid())
-  employeeId  String
-  employee    Employee    @relation(fields: [employeeId], references: [id])
-  leaveTypeId String
-  leaveType   LeaveType   @relation(fields: [leaveTypeId], references: [id])
-  startDate   DateTime    @db.Date
-  endDate     DateTime    @db.Date
-  isHalfDay   Boolean     @default(false)
-  reason      String?
-  status      LeaveStatus @default(PENDING)
-  reviewedById String?
-  reviewedBy  User?       @relation("ReviewedLeaves", fields: [reviewedById], references: [id])
-  reviewComment String?
-  createdAt   DateTime    @default(now())
-}
+// ── Payroll ───────────────────────────────────────────────────────────────────
 
 model PayrollPeriod {
   id     String        @id @default(uuid())
@@ -157,50 +118,49 @@ model PayrollPeriod {
 }
 
 model PayrollEntry {
-  id               String        @id @default(uuid())
-  payrollPeriodId  String
-  payrollPeriod    PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
-  employeeId       String
-  employee         Employee      @relation(fields: [employeeId], references: [id])
-  gross            Float
-  leaveDeduction   Float         @default(0)
-  halfDayDeduction Float         @default(0)
-  overtimePay      Float         @default(0)
-  netPay           Float
+  id              String        @id @default(uuid())
+  payrollPeriodId String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  totalDays       Int           @default(0)
+  fullDays        Int           @default(0)
+  halfDays        Int           @default(0)
+  totalHours      Float         @default(0)
+  totalEarnings   Float         @default(0)
+  extraWages      Float         @default(0)
+  gross           Float         @default(0)
+  netPay          Float         @default(0)
 
   @@unique([payrollPeriodId, employeeId])
 }
 
+// ── Announcements ─────────────────────────────────────────────────────────────
+
 model Announcement {
-  id        String   @id @default(uuid())
-  title     String
-  body      String
-  audience  String   @default("ALL")
+  id          String   @id @default(uuid())
+  title       String
+  body        String
+  audience    String   @default("ALL")
   createdById String
-  createdBy User     @relation("CreatedAnnouncements", fields: [createdById], references: [id])
-  createdAt DateTime @default(now())
+  createdBy   User     @relation("CreatedAnnouncements", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
 }
+
+// ── Notifications (manager-only) ──────────────────────────────────────────────
 
 model Notification {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  type      String
+  type      String   // CHECK_IN | CHECK_OUT | LATE | ABSENT | FACE_FAIL | PAYROLL_GENERATED
   message   String
+  actionUrl String?  // e.g. "/employees/abc123"
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 }
 
-model ChatMessage {
-  id         String   @id @default(uuid())
-  senderId   String
-  sender     Employee @relation("MessagesSent", fields: [senderId], references: [id])
-  receiverId String
-  receiver   Employee @relation("MessagesReceived", fields: [receiverId], references: [id])
-  message    String
-  sentAt     DateTime @default(now())
-  readAt     DateTime?
-}
+// ── Audit Log ─────────────────────────────────────────────────────────────────
 
 model AuditLog {
   id          String   @id @default(uuid())
@@ -213,25 +173,14 @@ model AuditLog {
   createdAt   DateTime @default(now())
 }
 
-model FaceResetRequest {
-  id           String          @id @default(uuid())
-  employeeId   String
-  employee     Employee        @relation(fields: [employeeId], references: [id])
-  reason       String
-  status       FaceResetStatus @default(PENDING)
-  reviewedById String?
-  reviewNote   String?
-  createdAt    DateTime        @default(now())
-}
+// ── Company Settings ──────────────────────────────────────────────────────────
 
 model CompanySetting {
-  id                   String  @id @default("1")
-  geofenceLat          Float
-  geofenceLng          Float
-  geofenceRadiusM      Float   @default(50)
-  faceMatchThreshold   Float   @default(0.6)
-  shiftStart           String  @default("09:00") // HH:mm format
-  shiftEnd             String  @default("17:00")
-  overtimeRate         Float   @default(1.5)
-  overtimeOffsetsLeave Boolean @default(false)
+  id                    String  @id @default("1")
+  faceMatchThreshold    Float   @default(0.60)
+  shiftStart            String  @default("09:00")
+  shiftEnd              String  @default("17:00")
+  halfDayThresholdHours Float   @default(4.0)
+  fullDayHours          Float   @default(8.0)
 }
+

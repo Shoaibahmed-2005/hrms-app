@@ -17,13 +17,13 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedPayrollRouteImport } from './routes/_authenticated/payroll'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
-import { Route as AuthenticatedLeaveRouteImport } from './routes/_authenticated/leave'
 import { Route as AuthenticatedEmployeesRouteImport } from './routes/_authenticated/employees'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedAttendanceRouteImport } from './routes/_authenticated/attendance'
 import { Route as AuthenticatedAnnouncementsRouteImport } from './routes/_authenticated/announcements'
+import { Route as AuthenticatedEmployeesIndexRouteImport } from './routes/_authenticated/employees.index'
 import { Route as AuthenticatedEmployeesNewRouteImport } from './routes/_authenticated/employees.new'
+import { Route as AuthenticatedEmployeesEmployeeIdRouteImport } from './routes/_authenticated/employees.$employeeId'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -65,11 +65,6 @@ const AuthenticatedNotificationsRoute =
     path: '/notifications',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedLeaveRoute = AuthenticatedLeaveRouteImport.update({
-  id: '/leave',
-  path: '/leave',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedEmployeesRoute = AuthenticatedEmployeesRouteImport.update({
   id: '/employees',
   path: '/employees',
@@ -78,11 +73,6 @@ const AuthenticatedEmployeesRoute = AuthenticatedEmployeesRouteImport.update({
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAttendanceRoute = AuthenticatedAttendanceRouteImport.update({
@@ -96,10 +86,22 @@ const AuthenticatedAnnouncementsRoute =
     path: '/announcements',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedEmployeesIndexRoute =
+  AuthenticatedEmployeesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedEmployeesRoute,
+  } as any)
 const AuthenticatedEmployeesNewRoute =
   AuthenticatedEmployeesNewRouteImport.update({
     id: '/new',
     path: '/new',
+    getParentRoute: () => AuthenticatedEmployeesRoute,
+  } as any)
+const AuthenticatedEmployeesEmployeeIdRoute =
+  AuthenticatedEmployeesEmployeeIdRouteImport.update({
+    id: '/$employeeId',
+    path: '/$employeeId',
     getParentRoute: () => AuthenticatedEmployeesRoute,
   } as any)
 
@@ -109,15 +111,15 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
   '/attendance': typeof AuthenticatedAttendanceRoute
-  '/chat': typeof AuthenticatedChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/employees': typeof AuthenticatedEmployeesRouteWithChildren
-  '/leave': typeof AuthenticatedLeaveRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/payroll': typeof AuthenticatedPayrollRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/employees/$employeeId': typeof AuthenticatedEmployeesEmployeeIdRoute
   '/employees/new': typeof AuthenticatedEmployeesNewRoute
+  '/employees/': typeof AuthenticatedEmployeesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -125,15 +127,14 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
   '/attendance': typeof AuthenticatedAttendanceRoute
-  '/chat': typeof AuthenticatedChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/employees': typeof AuthenticatedEmployeesRouteWithChildren
-  '/leave': typeof AuthenticatedLeaveRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/payroll': typeof AuthenticatedPayrollRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/employees/$employeeId': typeof AuthenticatedEmployeesEmployeeIdRoute
   '/employees/new': typeof AuthenticatedEmployeesNewRoute
+  '/employees': typeof AuthenticatedEmployeesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -143,15 +144,15 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/announcements': typeof AuthenticatedAnnouncementsRoute
   '/_authenticated/attendance': typeof AuthenticatedAttendanceRoute
-  '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/employees': typeof AuthenticatedEmployeesRouteWithChildren
-  '/_authenticated/leave': typeof AuthenticatedLeaveRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/payroll': typeof AuthenticatedPayrollRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/employees/$employeeId': typeof AuthenticatedEmployeesEmployeeIdRoute
   '/_authenticated/employees/new': typeof AuthenticatedEmployeesNewRoute
+  '/_authenticated/employees/': typeof AuthenticatedEmployeesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -161,15 +162,15 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/announcements'
     | '/attendance'
-    | '/chat'
     | '/dashboard'
     | '/employees'
-    | '/leave'
     | '/notifications'
     | '/payroll'
     | '/reports'
     | '/settings'
+    | '/employees/$employeeId'
     | '/employees/new'
+    | '/employees/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -177,15 +178,14 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/announcements'
     | '/attendance'
-    | '/chat'
     | '/dashboard'
-    | '/employees'
-    | '/leave'
     | '/notifications'
     | '/payroll'
     | '/reports'
     | '/settings'
+    | '/employees/$employeeId'
     | '/employees/new'
+    | '/employees'
   id:
     | '__root__'
     | '/'
@@ -194,15 +194,15 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_authenticated/announcements'
     | '/_authenticated/attendance'
-    | '/_authenticated/chat'
     | '/_authenticated/dashboard'
     | '/_authenticated/employees'
-    | '/_authenticated/leave'
     | '/_authenticated/notifications'
     | '/_authenticated/payroll'
     | '/_authenticated/reports'
     | '/_authenticated/settings'
+    | '/_authenticated/employees/$employeeId'
     | '/_authenticated/employees/new'
+    | '/_authenticated/employees/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -270,13 +270,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/leave': {
-      id: '/_authenticated/leave'
-      path: '/leave'
-      fullPath: '/leave'
-      preLoaderRoute: typeof AuthenticatedLeaveRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/employees': {
       id: '/_authenticated/employees'
       path: '/employees'
@@ -289,13 +282,6 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/chat': {
-      id: '/_authenticated/chat'
-      path: '/chat'
-      fullPath: '/chat'
-      preLoaderRoute: typeof AuthenticatedChatRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/attendance': {
@@ -312,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAnnouncementsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/employees/': {
+      id: '/_authenticated/employees/'
+      path: '/'
+      fullPath: '/employees/'
+      preLoaderRoute: typeof AuthenticatedEmployeesIndexRouteImport
+      parentRoute: typeof AuthenticatedEmployeesRoute
+    }
     '/_authenticated/employees/new': {
       id: '/_authenticated/employees/new'
       path: '/new'
@@ -319,16 +312,28 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEmployeesNewRouteImport
       parentRoute: typeof AuthenticatedEmployeesRoute
     }
+    '/_authenticated/employees/$employeeId': {
+      id: '/_authenticated/employees/$employeeId'
+      path: '/$employeeId'
+      fullPath: '/employees/$employeeId'
+      preLoaderRoute: typeof AuthenticatedEmployeesEmployeeIdRouteImport
+      parentRoute: typeof AuthenticatedEmployeesRoute
+    }
   }
 }
 
 interface AuthenticatedEmployeesRouteChildren {
+  AuthenticatedEmployeesEmployeeIdRoute: typeof AuthenticatedEmployeesEmployeeIdRoute
   AuthenticatedEmployeesNewRoute: typeof AuthenticatedEmployeesNewRoute
+  AuthenticatedEmployeesIndexRoute: typeof AuthenticatedEmployeesIndexRoute
 }
 
 const AuthenticatedEmployeesRouteChildren: AuthenticatedEmployeesRouteChildren =
   {
+    AuthenticatedEmployeesEmployeeIdRoute:
+      AuthenticatedEmployeesEmployeeIdRoute,
     AuthenticatedEmployeesNewRoute: AuthenticatedEmployeesNewRoute,
+    AuthenticatedEmployeesIndexRoute: AuthenticatedEmployeesIndexRoute,
   }
 
 const AuthenticatedEmployeesRouteWithChildren =
@@ -339,10 +344,8 @@ const AuthenticatedEmployeesRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnnouncementsRoute: typeof AuthenticatedAnnouncementsRoute
   AuthenticatedAttendanceRoute: typeof AuthenticatedAttendanceRoute
-  AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedEmployeesRoute: typeof AuthenticatedEmployeesRouteWithChildren
-  AuthenticatedLeaveRoute: typeof AuthenticatedLeaveRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedPayrollRoute: typeof AuthenticatedPayrollRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
@@ -352,10 +355,8 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnnouncementsRoute: AuthenticatedAnnouncementsRoute,
   AuthenticatedAttendanceRoute: AuthenticatedAttendanceRoute,
-  AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedEmployeesRoute: AuthenticatedEmployeesRouteWithChildren,
-  AuthenticatedLeaveRoute: AuthenticatedLeaveRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedPayrollRoute: AuthenticatedPayrollRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,

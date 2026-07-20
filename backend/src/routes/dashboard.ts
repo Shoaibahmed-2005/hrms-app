@@ -8,8 +8,8 @@ router.get('/manager', requireAuth, async (req: AuthRequest, res: any) => {
   try {
     if (req.user.role !== 'MANAGER') return res.status(403).json({ error: 'Unauthorized' });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const localStr = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
+    const today = new Date(`${localStr}T00:00:00.000Z`);
 
     const [totalEmp, activeEmp, pendingLeave, attRecords] = await Promise.all([
       prisma.employee.count(),
@@ -57,8 +57,8 @@ router.get('/employee', requireAuth, async (req: AuthRequest, res: any) => {
     const employeeId = req.user.employee?.id;
     if (!employeeId) return res.status(404).json({ error: 'Employee not found' });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const localStr = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
+    const today = new Date(`${localStr}T00:00:00.000Z`);
 
     const att = await prisma.attendanceRecord.findUnique({
       where: { employeeId_date: { employeeId, date: today } }

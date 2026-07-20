@@ -15,8 +15,7 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
 
     const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key');
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      include: { employee: true }
+      where: { id: decoded.userId }
     });
 
     if (!user) {

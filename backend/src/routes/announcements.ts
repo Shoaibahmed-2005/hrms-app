@@ -9,7 +9,7 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const announcements = await prisma.announcement.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { createdBy: { select: { email: true, employee: { select: { name: true } } } } }
+      include: { createdBy: { select: { email: true } } }
     });
     res.json(announcements);
   } catch (error) {

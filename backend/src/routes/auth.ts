@@ -9,20 +9,17 @@ const router = Router();
 router.post('/login', async (req: any, res: any) => {
   try {
     const { email, password } = req.body;
-    
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { employee: true }
-    });
 
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid credentials' });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+
+    // Only managers can log in
+    if (user.role !== 'MANAGER') {
+      return res.status(403).json({ error: 'Access denied. Only managers can log in.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
+    if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
 
     const token = jwt.sign(
       { userId: user.id },
@@ -31,10 +28,10 @@ router.post('/login', async (req: any, res: any) => {
     );
 
     res.json({
-      user,
-      token
+      token,
+      user: { id: user.id, email: user.email, role: user.role }
     });
-  } catch (error) {
+  } catch (e: any) {
     res.status(500).json({ error: 'Server error' });
   }
 });

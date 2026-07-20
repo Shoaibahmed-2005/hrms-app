@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 
 interface FaceCameraProps {
   mode: 'register' | 'verify';
-  onCapture: (descriptor: Float32Array) => void;
+  onCapture: (descriptor: Float32Array, imageUrl?: string) => void;
   onCancel: () => void;
   busy?: boolean;
 }
@@ -94,13 +94,27 @@ export function FaceCamera({ mode, onCapture, onCancel, busy = false }: FaceCame
   const handleCapture = async () => {
     if (!videoRef.current || apiState !== 'ready') return;
     setCapturing(true);
+    
+    // Capture image before stopping stream
+    const canvas = document.createElement('canvas');
+    canvas.width = videoRef.current.videoWidth || 640;
+    canvas.height = videoRef.current.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    let dataUrl: string | undefined;
+    if (ctx) {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(videoRef.current, 0, 0);
+      dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    }
+
     const descriptor = await detectAndDescribe(videoRef.current);
     setCapturing(false);
     if (!descriptor) {
       return; // caller gets null — will show error via faceDetected state
     }
     stopCamera();
-    onCapture(descriptor);
+    onCapture(descriptor, dataUrl);
   };
 
   const handleCancel = () => {

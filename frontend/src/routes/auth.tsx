@@ -79,20 +79,13 @@ function AuthPage() {
             </form>
 
             <div className="mt-6 flex flex-col gap-2 border-t pt-6">
-              <p className="text-center text-xs font-medium text-muted-foreground mb-1">Quick Test Logins</p>
+              <p className="text-center text-xs font-medium text-muted-foreground mb-1">Quick Test Login</p>
               <Button 
                 variant="outline" 
                 size="sm" 
                 onClick={() => { setEmail("manager@demohrms.com"); setPassword("Manager@123"); }}
               >
                 Fill Manager Credentials
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => { setEmail("employee2@demohrms.com"); setPassword("Employee@123"); }}
-              >
-                Fill Employee Credentials
               </Button>
             </div>
 

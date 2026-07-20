@@ -14,14 +14,14 @@ A full-stack web app for managing employees, attendance, leave, payroll, and com
 | Feature | Description |
 |---|---|
 | 🔐 **Auth** | Login with email + password. JWT sessions stored securely in `sessionStorage` (supports multiple tabs). |
-| 🛡️ **Face Biometrics** | Uses `face-api.js` (ResNet-34 & TinyFaceDetector) for 128-point facial recognition during check-ins. |
-| 👥 **Employees** | Manager can add, view, activate/deactivate employees. |
-| 🕐 **Attendance** | Employees check in/out via webcam + GPS geofencing. Manager monitors all live records. |
+| 🛡️ **Face Biometrics** | Uses `face-api.js` (ResNet-34 & TinyFaceDetector) for 128-point facial recognition. Manager registers face during employee creation, and employees use it for live check-ins. |
+| 👥 **Employees** | Manager can add, view, activate/deactivate employees, and set custom shift times and geofence radii per company. |
+| 🕐 **Attendance** | Employees check in/out via webcam + GPS geofencing. Manager monitors live records with automatic local timezone handling. |
 | 🏖️ **Leave** | Employees apply for leave. Manager approves/rejects. |
-| 💰 **Payroll** | Manager generates and finalizes payslips. Employees download PDF payslips. |
+| 💰 **Payroll** | Manager generates and finalizes payslips based on hourly or monthly wages. Employees download PDF payslips. |
 | 📢 **Announcements** | Company-wide posts broadcasted by managers. |
 | 💬 **Chat** | Direct internal messaging between employees and managers. |
-| 🔔 **Notifications** | Real-time system alerts (leave status, payroll, welcome messages). |
+| 🔔 **Notifications** | Real-time system alerts (check-ins, late arrivals, leave status, payroll) with direct clickable links to profiles. |
 | 📊 **Reports & AI** | AI workforce trend prediction, plus charts showing department salary costs. |
 | ⚙️ **Settings** | Configure geofence radius, biometric strictness, and shift times. |
 
