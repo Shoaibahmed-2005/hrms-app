@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   Bell, CheckCheck, LogIn, LogOut, AlertTriangle,
-  IndianRupee, Clock, ShieldAlert
+  IndianRupee, Clock, ShieldAlert, CheckCircle2
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -18,6 +18,7 @@ export const Route = createFileRoute("/_authenticated/notifications")({
 const TYPE_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
   CHECK_IN:          { icon: LogIn,       color: "text-green-600",  label: "Check-in" },
   CHECK_OUT:         { icon: LogOut,      color: "text-blue-600",   label: "Check-out" },
+  KIOSK_CHECK_OUT:   { icon: CheckCircle2,color: "text-indigo-600", label: "Kiosk Check-out" },
   LATE:              { icon: Clock,       color: "text-amber-600",  label: "Late" },
   ABSENT:            { icon: AlertTriangle, color: "text-red-600",  label: "Absent" },
   FACE_FAIL:         { icon: ShieldAlert, color: "text-red-600",    label: "Face Fail" },
@@ -51,8 +52,29 @@ function Notifications() {
       // Mark as read then navigate
       apiFetch(`/notifications/read`, { method: "POST" }).catch(() => {});
       qc.invalidateQueries({ queryKey: ["notif-unread"] });
-      router.navigate({ to: n.actionUrl });
+      
+      try {
+        const url = new URL(n.actionUrl, window.location.origin);
+        const search: Record<string, string> = {};
+        url.searchParams.forEach((val, key) => {
+          search[key] = val;
+        });
+        if (Object.keys(search).length > 0) {
+          router.navigate({ to: url.pathname as any, search });
+        } else {
+          router.navigate({ to: n.actionUrl });
+        }
+      } catch (e) {
+        router.navigate({ to: n.actionUrl });
+      }
     }
+  };
+
+  const handleDismiss = (e: React.MouseEvent, n: any) => {
+    e.stopPropagation();
+    apiFetch(`/notifications/read`, { method: "POST" }).catch(() => {});
+    qc.invalidateQueries({ queryKey: ["notifs"] });
+    qc.invalidateQueries({ queryKey: ["notif-unread"] });
   };
 
   const unread = (list.data ?? []).filter((n: any) => !n.isRead).length;
@@ -115,10 +137,16 @@ function Notifications() {
                       <span className="text-xs text-muted-foreground">
                         {timeAgo(new Date(n.createdAt))}
                       </span>
-                      {isClickable && (
+                      {isClickable && n.type !== 'KIOSK_CHECK_OUT' && (
                         <span className="text-xs text-primary">Tap to view →</span>
                       )}
                     </div>
+                    {n.type === 'KIOSK_CHECK_OUT' && isUnread && (
+                      <div className="mt-3 flex gap-2">
+                         <Button size="sm" className="h-7 text-xs bg-indigo-600 hover:bg-indigo-500 text-white" onClick={(e) => { e.stopPropagation(); handleClick(n); }}>Add Bonus</Button>
+                         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleDismiss(e, n)}>No Bonus</Button>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

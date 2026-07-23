@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription
@@ -10,33 +10,55 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
-  LogIn, LogOut, ScanFace, Search, Clock, CheckCircle2,
-  AlertTriangle, Users, TrendingUp, IndianRupee
+  LogIn, LogOut, Search, Clock, CheckCircle2,
+  AlertTriangle, Users, TrendingUp, IndianRupee, ClipboardCheck
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { FaceCamera } from "@/components/FaceCamera";
 
 export const Route = createFileRoute("/_authenticated/attendance")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    addBonusFor: search.addBonusFor as string | undefined,
+    employeeId: search.employeeId as string | undefined,
+  }),
   component: AttendancePage,
 });
 
 function AttendancePage() {
+  const searchParams = Route.useSearch();
+  const router = useRouter();
+
+
   const qc = useQueryClient();
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<{ type: "checkin" | "checkout"; employee: any } | null>(null);
+  const [bonusDialog, setBonusDialog] = useState<{ recordId: string; employeeId: string; employee?: any } | null>(null);
+  const [extraWages, setExtraWages] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // When employees data is ready, and we have search params, open the dialog
   const employees = useQuery({
     queryKey: ["employees"],
     queryFn: () => apiFetch("/employees"),
   });
+
+  useEffect(() => {
+    if (searchParams.addBonusFor && searchParams.employeeId && employees.data && !bonusDialog) {
+      const emp = (employees.data as any[]).find((e) => e.id === searchParams.employeeId);
+      if (emp) {
+        setBonusDialog({ recordId: searchParams.addBonusFor, employeeId: searchParams.employeeId, employee: emp });
+        router.navigate({ search: {} });
+      }
+    }
+  }, [searchParams, employees.data]);
+
 
   const records = useQuery({
     queryKey: ["att-records"],
@@ -52,7 +74,6 @@ function AttendancePage() {
     return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
   };
 
-  // Build a map of today's attendance keyed by employeeId
   const todayMap = useMemo(() => {
     const m: Record<string, any> = {};
     (records.data ?? []).forEach((r: any) => {
@@ -61,7 +82,6 @@ function AttendancePage() {
     return m;
   }, [records.data, todayStr]);
 
-  // Filtered records for the selected date
   const dateRecords = useMemo(() =>
     (records.data ?? []).filter((r: any) => toLocalYYYYMMDD(r.date) === date),
     [records.data, date]
@@ -74,15 +94,15 @@ function AttendancePage() {
     );
   }, [employees.data, search]);
 
-  const handleCheckIn = async (descriptor: Float32Array) => {
+  const handleCheckIn = async () => {
     if (!dialog) return;
     setBusy(true);
     try {
-      const result = await apiFetch("/attendance/check-in", {
+      await apiFetch("/attendance/manual-check-in", {
         method: "POST",
-        body: JSON.stringify({ employeeId: dialog.employee.id, descriptor: Array.from(descriptor) }),
+        body: JSON.stringify({ employeeId: dialog.employee.id }),
       });
-      toast.success(`✅ ${dialog.employee.name} checked in — ${result.faceScore}% match`);
+      toast.success(`✅ ${dialog.employee.name} checked in manually`);
       qc.invalidateQueries({ queryKey: ["att-records"] });
       qc.invalidateQueries({ queryKey: ["notif-unread"] });
       qc.invalidateQueries({ queryKey: ["reports-dashboard"] });
@@ -94,21 +114,17 @@ function AttendancePage() {
     }
   };
 
-  const [extraWages, setExtraWages] = useState("");
-
-  const handleCheckOut = async (descriptor: Float32Array) => {
+  const handleCheckOut = async () => {
     if (!dialog) return;
     setBusy(true);
     try {
-      const payload: any = { employeeId: dialog.employee.id, descriptor: Array.from(descriptor) };
-      if (extraWages && !isNaN(Number(extraWages))) {
-        payload.extraWages = Number(extraWages);
-      }
-      const result = await apiFetch("/attendance/check-out", {
+      const payload: any = { employeeId: dialog.employee.id };
+      if (extraWages && !isNaN(Number(extraWages))) payload.extraWages = Number(extraWages);
+      const result = await apiFetch("/attendance/manual-check-out", {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      toast.success(`🏁 ${dialog.employee.name} checked out — ${result.hoursWorked?.toFixed(1)}h, ₹${result.dailyEarnings?.toFixed(2)} + ₹${result.extraWages || 0} Extra`);
+      toast.success(`🏁 ${dialog.employee.name} checked out — ${result.hoursWorked?.toFixed(1)}h, ₹${result.dailyEarnings?.toFixed(2)}${result.extraWages ? ` + ₹${result.extraWages} Extra` : ''}`);
       qc.invalidateQueries({ queryKey: ["att-records"] });
       qc.invalidateQueries({ queryKey: ["notif-unread"] });
       qc.invalidateQueries({ queryKey: ["reports-dashboard"] });
@@ -122,20 +138,44 @@ function AttendancePage() {
   };
 
   const presentToday = Object.values(todayMap).filter((r: any) => r.checkInTime).length;
+  const handleAddBonus = async () => {
+    if (!bonusDialog) return;
+    setBusy(true);
+    try {
+      const payload = {
+        recordId: bonusDialog.recordId,
+        extraWages: extraWages ? Number(extraWages) : 0,
+      };
+      await apiFetch("/attendance/add-bonus", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      toast.success("Bonus added successfully");
+      qc.invalidateQueries({ queryKey: ["att-records"] });
+      setBonusDialog(null);
+      setExtraWages("");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to add bonus");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const totalActive = (employees.data ?? []).filter((e: any) => e.status === "ACTIVE").length;
   const todayEarnings = Object.values(todayMap).reduce((s: number, r: any) => s + (r.dailyEarnings ?? 0) + (r.extraWages ?? 0), 0);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="font-serif text-2xl sm:text-3xl font-semibold tracking-tight">Attendance</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Mark employee attendance using face verification
+          Manually mark employee attendance. For face-verified check-ins, use the{" "}
+          <a href="/kiosk" target="_blank" className="underline text-primary font-medium hover:opacity-80">
+            Employee Kiosk ↗
+          </a>
         </p>
       </div>
 
-      {/* Today's KPI Strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KPI label="Present Today" value={String(presentToday)} icon={CheckCircle2} color="text-green-600" />
         <KPI label="Total Active" value={String(totalActive)} icon={Users} />
@@ -143,13 +183,14 @@ function AttendancePage() {
         <KPI label="Today's Earnings" value={`₹${todayEarnings.toFixed(0)}`} icon={IndianRupee} color="text-blue-600" />
       </div>
 
-      {/* Employee Check-in Grid */}
       <Card>
         <CardHeader className="border-b pb-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="font-serif text-lg">Mark Attendance</CardTitle>
-              <CardDescription>Select an employee and use face verification to check in or out</CardDescription>
+              <CardTitle className="font-serif text-lg flex items-center gap-2">
+                <ClipboardCheck className="h-5 w-5" /> Manual Attendance
+              </CardTitle>
+              <CardDescription>Click Check In or Check Out to manually mark attendance for any employee</CardDescription>
             </div>
             <div className="relative w-full sm:w-64">
               <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -177,7 +218,6 @@ function AttendancePage() {
                 const rec = todayMap[emp.id];
                 const checkedIn = !!rec?.checkInTime;
                 const checkedOut = !!rec?.checkOutTime;
-                const hasFace = emp._count?.faceEmbeddings > 0;
                 return (
                   <div
                     key={emp.id}
@@ -220,15 +260,12 @@ function AttendancePage() {
                       </div>
                     )}
                     <div className="mt-auto flex gap-2 pt-2">
-                      {!hasFace ? (
-                        <p className="text-xs text-amber-600 flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> No face registered
-                        </p>
-                      ) : !checkedIn ? (
+                      {!checkedIn ? (
                         <Button
                           size="sm"
                           className="flex-1 text-xs h-8"
                           onClick={() => setDialog({ type: "checkin", employee: emp })}
+                          disabled={emp.status === "INACTIVE"}
                         >
                           <LogIn className="mr-1.5 h-3.5 w-3.5" /> Check In
                         </Button>
@@ -255,7 +292,6 @@ function AttendancePage() {
         </CardContent>
       </Card>
 
-      {/* Attendance Records Table */}
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b">
           <div>
@@ -339,45 +375,133 @@ function AttendancePage() {
         </CardContent>
       </Card>
 
-      {/* Face Verification Dialog */}
-      <Dialog open={!!dialog} onOpenChange={o => { if (!o && !busy) { setDialog(null); setExtraWages(""); } }}>
-        <DialogContent className="max-w-md mx-4 sm:mx-auto">
+      {/* Manual Check-In Dialog */}
+      <Dialog open={!!dialog && dialog.type === "checkin"} onOpenChange={o => { if (!o && !busy) setDialog(null); }}>
+        <DialogContent className="max-w-sm mx-4 sm:mx-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-serif">
-              <ScanFace className="h-5 w-5" />
-              {dialog?.type === "checkin" ? "Check In" : "Check Out"} — {dialog?.employee?.name}
+              <LogIn className="h-5 w-5 text-primary" /> Manual Check In
             </DialogTitle>
             <DialogDescription>
-              {dialog?.type === "checkin"
-                ? "Position employee's face in the frame to verify and check in."
-                : "Verify employee's face to record check-out and calculate earnings."}
+              Confirm manual check-in for <strong>{dialog?.employee?.name}</strong>. This records the current time.
             </DialogDescription>
           </DialogHeader>
-          
-          {dialog?.type === "checkout" && (
-            <div className="py-2 space-y-2 border-b">
-              <p className="text-sm font-medium">Add Extra Wages (Optional)</p>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">₹</span>
-                <Input 
-                  type="number" 
-                  min="0"
-                  placeholder="e.g. 50 (Bonus/Extra Time)"
-                  value={extraWages}
-                  onChange={e => setExtraWages(e.target.value)}
-                />
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3">
+            {dialog?.employee?.photoUrl ? (
+              <img src={dialog.employee.photoUrl} alt={dialog.employee.name} className="h-12 w-12 rounded-full object-cover border" />
+            ) : (
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-lg border">
+                {dialog?.employee?.name?.charAt(0)}
               </div>
+            )}
+            <div>
+              <p className="font-semibold text-sm">{dialog?.employee?.name}</p>
+              <p className="text-xs text-muted-foreground">{dialog?.employee?.designation || dialog?.employee?.department}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Time: {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</p>
             </div>
-          )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDialog(null)} disabled={busy}>Cancel</Button>
+            <Button onClick={handleCheckIn} disabled={busy}>
+              {busy ? "Processing…" : "✅ Confirm Check In"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          {dialog && (
-            <FaceCamera
-              mode="verify"
-              onCapture={dialog.type === "checkin" ? handleCheckIn : handleCheckOut}
-              onCancel={() => { if (!busy) { setDialog(null); setExtraWages(""); } }}
-              busy={busy}
-            />
-          )}
+      {/* Manual Check-Out Dialog */}
+      <Dialog open={!!dialog && dialog.type === "checkout"} onOpenChange={o => { if (!o && !busy) { setDialog(null); setExtraWages(""); } }}>
+        <DialogContent className="max-w-sm mx-4 sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-serif">
+              <LogOut className="h-5 w-5 text-primary" /> Manual Check Out
+            </DialogTitle>
+            <DialogDescription>
+              Confirm check-out for <strong>{dialog?.employee?.name}</strong>. Earnings calculated automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3">
+            {dialog?.employee?.photoUrl ? (
+              <img src={dialog.employee.photoUrl} alt={dialog.employee.name} className="h-12 w-12 rounded-full object-cover border" />
+            ) : (
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-lg border">
+                {dialog?.employee?.name?.charAt(0)}
+              </div>
+            )}
+            <div>
+              <p className="font-semibold text-sm">{dialog?.employee?.name}</p>
+              <p className="text-xs text-muted-foreground">{dialog?.employee?.designation || dialog?.employee?.department}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Time: {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</p>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="extra-wages" className="text-sm">Extra Wages (Optional)</Label>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground text-sm">₹</span>
+              <Input
+                id="extra-wages"
+                type="number"
+                min="0"
+                placeholder="e.g. 50 for bonus or overtime"
+                value={extraWages}
+                onChange={e => setExtraWages(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setDialog(null); setExtraWages(""); }} disabled={busy}>Cancel</Button>
+            <Button onClick={handleCheckOut} disabled={busy}>
+              {busy ? "Processing…" : "🏁 Confirm Check Out"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Bonus Dialog (from Kiosk notification) */}
+      <Dialog open={!!bonusDialog} onOpenChange={o => { if (!o && !busy) { setBonusDialog(null); setExtraWages(""); } }}>
+        <DialogContent className="max-w-sm mx-4 sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-serif">
+              <IndianRupee className="h-5 w-5 text-indigo-600" /> Add Bonus
+            </DialogTitle>
+            <DialogDescription>
+              Add bonus or extra wages for <strong>{bonusDialog?.employee?.name}</strong>'s kiosk check-out today.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-3 rounded-lg border bg-indigo-50/50 p-3">
+            {bonusDialog?.employee?.photoUrl ? (
+              <img src={bonusDialog.employee.photoUrl} alt={bonusDialog.employee.name} className="h-12 w-12 rounded-full object-cover border" />
+            ) : (
+              <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-lg border">
+                {bonusDialog?.employee?.name?.charAt(0)}
+              </div>
+            )}
+            <div>
+              <p className="font-semibold text-sm">{bonusDialog?.employee?.name}</p>
+              <p className="text-xs text-muted-foreground">{bonusDialog?.employee?.designation || bonusDialog?.employee?.department}</p>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="bonus-wages" className="text-sm">Bonus Amount (₹)</Label>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground text-sm">₹</span>
+              <Input
+                id="bonus-wages"
+                type="number"
+                min="0"
+                placeholder="e.g. 100"
+                value={extraWages}
+                onChange={e => setExtraWages(e.target.value)}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setBonusDialog(null); setExtraWages(""); }} disabled={busy}>Cancel</Button>
+            <Button onClick={handleAddBonus} disabled={busy || !extraWages} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+              {busy ? "Processing…" : "💰 Save Bonus"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

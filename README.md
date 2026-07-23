@@ -16,10 +16,10 @@ A full-stack web app for managing employees, attendance, leave, payroll, and com
 | 🔐 **Auth** | Login with email + password. JWT sessions stored securely in `sessionStorage` (supports multiple tabs). |
 | 🛡️ **Face Biometrics** | Uses `face-api.js` (ResNet-34 & TinyFaceDetector) for 128-point facial recognition. Manager registers face during employee creation, and employees use it for live check-ins. |
 | 👥 **Employees** | Manager can add, view, activate/deactivate employees, and set custom shift times and geofence radii per company. |
-| 🕐 **Attendance** | Employees check in/out via webcam + GPS geofencing. Manager monitors live records with automatic local timezone handling. |
+| 🕐 **Attendance** | Two-mode system: (1) **Employee Kiosk** at `/kiosk` — face-recognition terminal for employees to self-check-in/out. (2) **Manager Dashboard** — manual check-in/out for any employee without face verification. |
 | 🏖️ **Leave** | Employees apply for leave. Manager approves/rejects. |
-| 💰 **Payroll** | Manager generates and finalizes payslips based on hourly or monthly wages. Employees download PDF payslips. |
-| 📢 **Announcements** | Company-wide posts broadcasted by managers. |
+| 💰 **Payroll** | Manager generates and finalizes payslips based on hourly or monthly wages. **Managers can also instantly add on-the-spot bonuses** directly from Kiosk check-out notifications. |
+| 📢 **Announcements** | Company-wide posts broadcasted by managers. **Today's announcements appear live on the Employee Kiosk** home screen automatically. |
 | 💬 **Chat** | Direct internal messaging between employees and managers. |
 | 🔔 **Notifications** | Real-time system alerts (check-ins, late arrivals, leave status, payroll) with direct clickable links to profiles. |
 | 📊 **Reports & AI** | AI workforce trend prediction, plus charts showing department salary costs. |
@@ -149,23 +149,48 @@ You need **two terminal windows open at the same time**.
 cd hrms-code/backend
 npm run dev
 ```
-Wait until you see: `Backend running on port 3000`. As you use the app, API requests will log here in real-time.
+Wait until you see: `Backend running on port 3000`. Every API request is logged here in real-time.
 
 ### Terminal 2 — Start the Frontend
 ```bash
 cd hrms-code/frontend
 npm run dev
 ```
-Wait until you see the Vite ready message.
+Vite will print multiple links like this:
+```
+➜  Local:   https://localhost:5173/
+➜  Network: https://192.168.1.x:5173/
+```
 
-**Then open your browser and go to: [http://localhost:5173](http://localhost:5173)**
+| Link | Purpose |
+|---|---|
+| `https://localhost:5173/` | Open on **your machine** (manager dashboard) |
+| `https://192.168.1.x:5173/` | Open on **any device on the same Wi-Fi** (e.g. tablet for kiosk) |
+
+### Pages
+
+| Page | URL | Who uses it |
+|---|---|---|
+| **Manager Dashboard** | `https://localhost:5173/` | Manager — login required |
+| **Employee Kiosk** | `https://localhost:5173/kiosk` | Employees — no login, always open on office tablet |
 
 ---
+
+## Two-Device Setup (Recommended)
+
+This is the intended real-world workflow:
+
+1. **Manager's device** → open `https://localhost:5173/` → log in → leave the dashboard open to monitor staff and receive live Kiosk notifications.
+2. **Office tablet** → open `https://192.168.1.x:5173/kiosk` → leave it open all day as the face-recognition attendance terminal.
+
+Employees walk up to the tablet, press **Check In** or **Check Out**, look at the camera, and they're done. 
+Any **Announcements** posted by the manager today will automatically appear on this tablet screen for employees to read.
+When an employee checks out, a notification pops up on the manager's device, giving them a 1-click option to add a **Bonus** to that shift.
 
 ## Multi-Tab Support & Login
 
 This application uses `sessionStorage` for security tokens. This means **every browser tab is completely independent**.
-You can open `http://localhost:5173` in Tab A and log in as the Manager, then open a completely new Tab B and log in as an Employee to test real-time interactions!
+You can open `https://localhost:5173` in Tab A and log in as the Manager, then open a completely new Tab B and log in as a different account to test real-time interactions!
 
 | Role | Email | Password |
 |---|---|---|

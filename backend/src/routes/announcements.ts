@@ -4,6 +4,27 @@ import prisma from '../../database/db';
 
 const router = Router();
 
+// Public route to fetch today's announcements (for Kiosk)
+router.get('/public/today', async (req, res) => {
+  try {
+    // Fetch announcements from the last 24 hours to avoid timezone date boundary issues
+    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const announcements = await prisma.announcement.findMany({
+      where: {
+        createdAt: {
+          gte: last24h
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    });
+    res.json(announcements);
+  } catch (error) {
+    console.error('Fetch public announcements error:', error);
+    res.status(500).json({ error: 'Failed to fetch announcements' });
+  }
+});
+
 // List all announcements (newest first)
 router.get('/', requireAuth, async (req, res) => {
   try {
