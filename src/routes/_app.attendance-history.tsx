@@ -177,16 +177,27 @@ function AttendanceManagementPage() {
                         <Badge variant="destructive">Absent</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-primary hover:text-primary"
-                          disabled={processingId === emp.id || date !== today()}
-                          onClick={() => handleManualCheckIn(emp.id)}
-                        >
-                          {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
-                          Check-In
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-primary hover:text-primary disabled:opacity-50"
+                            disabled={processingId === emp.id || date !== today()}
+                            onClick={() => handleManualCheckIn(emp.id)}
+                          >
+                            {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
+                            Check-In
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-accent hover:text-accent disabled:opacity-50"
+                            disabled={true}
+                          >
+                            <LogOut className="mr-1.5 h-4 w-4" />
+                            Check-Out
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ];
@@ -213,29 +224,26 @@ function AttendanceManagementPage() {
                       <TableCell className="text-right">
                         {isLatest && (
                           <div className="flex justify-end gap-2">
-                            {!sessionActive ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-primary hover:text-primary"
-                                disabled={processingId === emp.id || date !== today()}
-                                onClick={() => handleManualCheckIn(emp.id)}
-                              >
-                                {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
-                                Check-In
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-accent hover:text-accent"
-                                disabled={processingId === emp.id || date !== today()}
-                                onClick={() => handleManualCheckOut(emp.id)}
-                              >
-                                {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="mr-1.5 h-4 w-4" />}
-                                Check-Out
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-primary hover:text-primary disabled:opacity-50"
+                              disabled={sessionActive || processingId === emp.id || date !== today()}
+                              onClick={() => handleManualCheckIn(emp.id)}
+                            >
+                              {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
+                              Check-In
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-accent hover:text-accent disabled:opacity-50"
+                              disabled={!sessionActive || processingId === emp.id || date !== today()}
+                              onClick={() => handleManualCheckOut(emp.id)}
+                            >
+                              {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="mr-1.5 h-4 w-4" />}
+                              Check-Out
+                            </Button>
                           </div>
                         )}
                       </TableCell>
