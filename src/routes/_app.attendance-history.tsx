@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_app/attendance-history")({
 });
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString("en-CA");
 }
 
 function AttendanceManagementPage() {
@@ -159,65 +159,89 @@ function AttendanceManagementPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredEmployees.map((emp) => {
-                // DailyAttendance groups all sessions for an employee on a given day
+              filteredEmployees.flatMap((emp) => {
                 const daily = attendanceRows.find(r => r.employeeIdRaw === emp.id);
-                const isCheckedIn = daily?.status === "Active";
-                const hasAttendance = !!daily;
+                const hasAttendance = !!daily && daily.sessions.length > 0;
 
-                const displayCheckIn = daily ? daily.firstIn : "-";
-                const displayCheckOut = daily ? daily.lastOut : "-";
-                const sessionSummary = daily && daily.sessions.length > 1
-                  ? daily.sessions.map(s => `${s.checkIn.slice(11,16)}-${s.checkOut === "-" ? "now" : s.checkOut.slice(11,16)}`).join(", ")
-                  : null;
+                if (!hasAttendance) {
+                  return [
+                    <TableRow key={emp.id}>
+                      <TableCell>
+                        <div className="font-medium">{emp.name}</div>
+                        <div className="text-xs text-muted-foreground">{emp.empCode}</div>
+                      </TableCell>
+                      <TableCell>{emp.department}</TableCell>
+                      <TableCell className="tabular-nums">-</TableCell>
+                      <TableCell className="tabular-nums">-</TableCell>
+                      <TableCell>
+                        <Badge variant="destructive">Absent</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-primary hover:text-primary"
+                          disabled={processingId === emp.id || date !== today()}
+                          onClick={() => handleManualCheckIn(emp.id)}
+                        >
+                          {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
+                          Check-In
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ];
+                }
 
-                return (
-                  <TableRow key={emp.id}>
-                    <TableCell>
-                      <div className="font-medium">{emp.name}</div>
-                      <div className="text-xs text-muted-foreground">{emp.empCode}</div>
-                    </TableCell>
-                    <TableCell>{emp.department}</TableCell>
-                    <TableCell className="tabular-nums">
-                      <div>{displayCheckIn}</div>
-                      {sessionSummary && <div className="text-[10px] text-muted-foreground">{sessionSummary}</div>}
-                    </TableCell>
-                    <TableCell className="tabular-nums">{displayCheckOut}</TableCell>
-                    <TableCell>
-                      <Badge variant={isCheckedIn ? "default" : daily?.status === "Half Day" ? "outline" : hasAttendance ? "secondary" : "destructive"}>
-                        {isCheckedIn ? "Active" : daily?.status ?? "Absent"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {!isCheckedIn && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-primary hover:text-primary"
-                            disabled={processingId === emp.id || date !== today()}
-                            onClick={() => handleManualCheckIn(emp.id)}
-                          >
-                            {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
-                            Check-In
-                          </Button>
+                return daily.sessions.map((session, i) => {
+                  const isLatest = i === daily.sessions.length - 1;
+                  const sessionActive = session.checkOut === "-";
+
+                  return (
+                    <TableRow key={session.id}>
+                      <TableCell>
+                        <div className="font-medium">{emp.name}</div>
+                        <div className="text-xs text-muted-foreground">{emp.empCode}</div>
+                      </TableCell>
+                      <TableCell>{emp.department}</TableCell>
+                      <TableCell className="tabular-nums">{session.checkIn}</TableCell>
+                      <TableCell className="tabular-nums">{session.checkOut}</TableCell>
+                      <TableCell>
+                        <Badge variant={sessionActive ? "default" : "secondary"}>
+                          {sessionActive ? "Active" : "Completed"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isLatest && (
+                          <div className="flex justify-end gap-2">
+                            {!sessionActive ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-primary hover:text-primary"
+                                disabled={processingId === emp.id || date !== today()}
+                                onClick={() => handleManualCheckIn(emp.id)}
+                              >
+                                {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
+                                Check-In
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-accent hover:text-accent"
+                                disabled={processingId === emp.id || date !== today()}
+                                onClick={() => handleManualCheckOut(emp.id)}
+                              >
+                                {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="mr-1.5 h-4 w-4" />}
+                                Check-Out
+                              </Button>
+                            )}
+                          </div>
                         )}
-                        {isCheckedIn && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-accent hover:text-accent"
-                            disabled={processingId === emp.id || date !== today()}
-                            onClick={() => handleManualCheckOut(emp.id)}
-                          >
-                            {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="mr-1.5 h-4 w-4" />}
-                            Check-Out
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
+                      </TableCell>
+                    </TableRow>
+                  );
+                });
               })
             )}
           </TableBody>

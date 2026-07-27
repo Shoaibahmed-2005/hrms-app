@@ -201,28 +201,23 @@ function ReportsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              attendanceRows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>
-                    <div className="text-sm font-medium">{row.employee ?? "Employee"}</div>
-                    <div className="text-xs text-muted-foreground">{row.employeeId}</div>
-                  </TableCell>
-                  <TableCell>{row.department ?? "-"}</TableCell>
-                  <TableCell className="tabular-nums">{row.date}</TableCell>
-                  <TableCell className="tabular-nums">
-                    <div>{row.firstIn}</div>
-                    {row.sessions.length > 1 && (
-                      <div className="text-[10px] text-muted-foreground">
-                        {row.sessions.map(s => `${s.checkIn.slice(11,16)}-${s.checkOut === "-" ? "active" : s.checkOut.slice(11,16)}`).join(", ")}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="tabular-nums">{row.lastOut}</TableCell>
-                  <TableCell className="text-right tabular-nums">{row.totalHours.toFixed(2)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{row.confidence}%</TableCell>
-                  <TableCell>{row.status}</TableCell>
-                </TableRow>
-              ))
+              attendanceRows.flatMap((row) => 
+                row.sessions.map((session) => (
+                  <TableRow key={session.id}>
+                    <TableCell>
+                      <div className="text-sm font-medium">{row.employee ?? "Employee"}</div>
+                      <div className="text-xs text-muted-foreground">{row.employeeId}</div>
+                    </TableCell>
+                    <TableCell>{row.department ?? "-"}</TableCell>
+                    <TableCell className="tabular-nums">{row.date}</TableCell>
+                    <TableCell className="tabular-nums">{session.checkIn}</TableCell>
+                    <TableCell className="tabular-nums">{session.checkOut}</TableCell>
+                    <TableCell className="text-right tabular-nums">{session.hours.toFixed(2)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{session.confidence}%</TableCell>
+                    <TableCell>{session.status}</TableCell>
+                  </TableRow>
+                ))
+              )
             )}
           </TableBody>
         </Table>
@@ -232,7 +227,7 @@ function ReportsPage() {
 }
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString("en-CA");
 }
 
 function monthStart() {
