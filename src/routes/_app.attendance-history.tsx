@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, Download, Search } from "lucide-react";
+import { Users, CalendarDays, Wallet, UserX, LogIn, LogOut, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -14,152 +14,215 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { downloadCSV } from "@/lib/csv";
-import { fetchAttendanceHistory, type AttendanceEntry } from "@/lib/hrms-db";
+import { Badge } from "@/components/ui/badge";
+import {
+  fetchDashboardData,
+  fetchEmployees,
+  fetchManagerAttendanceData,
+  recordManualCheckIn,
+  recordManualCheckOut,
+  type DashboardData,
+  type DbEmployee,
+  type DailyAttendance
+} from "@/lib/hrms-db";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/_app/attendance-history")({
-  head: () => ({ meta: [{ title: "Attendance History - Hivetree" }] }),
-  component: AttendanceHistoryPage,
+  head: () => ({ meta: [{ title: "Attendance Management - CleanUp" }] }),
+  component: AttendanceManagementPage,
 });
 
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function AttendanceHistoryPage() {
-  const [startDate, setStartDate] = useState(today());
-  const [endDate, setEndDate] = useState(today());
-  const [rows, setRows] = useState<AttendanceEntry[]>([]);
+function AttendanceManagementPage() {
+  const { user } = useAuth();
+  const [date, setDate] = useState(today());
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [employees, setEmployees] = useState<DbEmployee[]>([]);
+  const [attendanceRows, setAttendanceRows] = useState<DailyAttendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchAttendanceHistory(startDate, endDate);
-      setRows(data);
+      const [dash, emp, att] = await Promise.all([
+        fetchDashboardData(),
+        fetchEmployees(),
+        fetchManagerAttendanceData(date)
+      ]);
+      setDashboard(dash);
+      setEmployees(emp.filter(e => e.status === "Active"));
+      setAttendanceRows(att.rows);
     } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : "Could not load attendance history");
+      toast.error(error instanceof Error ? error.message : "Could not load data");
     } finally {
       setLoading(false);
     }
-  }, [endDate, startDate]);
+  }, [date]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const filtered = rows.filter((row) =>
-    `${row.employee ?? ""} ${row.employeeId ?? ""} ${row.department ?? ""}`
+  const handleManualCheckIn = async (employeeId: string) => {
+    if (!user) return;
+    setProcessingId(employeeId);
+    try {
+      await recordManualCheckIn(employeeId, user.id);
+      toast.success("Checked in manually");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error checking in");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleManualCheckOut = async (employeeId: string) => {
+    if (!user) return;
+    setProcessingId(employeeId);
+    try {
+      await recordManualCheckOut(employeeId, user.id);
+      toast.success("Checked out manually");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error checking out");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const filteredEmployees = employees.filter((emp) =>
+    `${emp.name} ${emp.empCode} ${emp.department}`
       .toLowerCase()
       .includes(q.toLowerCase()),
   );
-  const hours = filtered.reduce((sum, row) => sum + row.hours, 0);
-
-  function exportCsv() {
-    downloadCSV("attendance-history.csv", filtered);
-    toast.success("Attendance history exported");
-  }
 
   return (
     <div>
       <PageHeader
-        title="Attendance History"
-        description="Face scanner attendance by employee and selected day or period."
-        actions={
-          <Button size="sm" variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
-            <Download className="mr-1.5 h-4 w-4" />
-            CSV
-          </Button>
-        }
+        title="Attendance Management"
+        description="Monitor today's attendance and manage manual check-ins/outs."
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Records" value={loading ? "..." : filtered.length} icon={CalendarDays} />
-        <StatCard label="Hours" value={hours.toFixed(1)} />
+        <StatCard label="Present Today" value={dashboard?.presentToday ?? "..."} icon={CalendarDays} />
+        <StatCard label="Total Active" value={dashboard?.totalEmployees ?? "..."} icon={Users} />
+        <StatCard label="Total Absent" value={dashboard?.absentToday ?? "..."} icon={UserX} />
         <StatCard
-          label="Avg match"
-          value={
-            filtered.length
-              ? `${Math.round(filtered.reduce((sum, row) => sum + row.confidence, 0) / filtered.length)}%`
-              : "-"
-          }
+          label="Est. Earnings (Month)"
+          value={dashboard ? `₹${dashboard.payrollTotal.toLocaleString()}` : "..."}
+          icon={Wallet}
         />
-        <StatCard label="Range" value={startDate === endDate ? startDate : "Custom"} />
       </div>
 
-      <div className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-elevate-sm)]">
-        <Field label="From">
+      <div className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4 shadow-sm">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">Date</label>
           <Input
             type="date"
-            value={startDate}
-            onChange={(event) => setStartDate(event.target.value)}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
           />
-        </Field>
-        <Field label="To">
-          <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-        </Field>
-        <Button onClick={() => void load()}>Apply</Button>
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="relative min-w-[240px] flex-1">
           <Input
             value={q}
-            onChange={(event) => setQ(event.target.value)}
-            placeholder="Search employee"
-            className="pl-8"
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search employee..."
+            className="pl-4"
           />
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elevate-sm)]">
+      <div className="mt-6 overflow-hidden rounded-xl border bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <TableHead>Employee</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>In</TableHead>
-              <TableHead>Out</TableHead>
-              <TableHead className="text-right">Hours</TableHead>
-              <TableHead className="text-right">Face match</TableHead>
+              <TableHead>Department</TableHead>
+              <TableHead>Check-In</TableHead>
+              <TableHead>Check-Out</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
+            {filteredEmployees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
-                  {loading ? "Loading attendance..." : "No attendance found for this period."}
+                <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                  {loading ? "Loading..." : "No employees found."}
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>
-                    <div className="text-sm font-medium">{row.employee ?? "Employee"}</div>
-                    <div className="text-xs text-muted-foreground">{row.employeeId}</div>
-                  </TableCell>
-                  <TableCell className="tabular-nums">{row.date}</TableCell>
-                  <TableCell className="tabular-nums">{row.checkIn}</TableCell>
-                  <TableCell className="tabular-nums">{row.checkOut}</TableCell>
-                  <TableCell className="text-right tabular-nums">{row.hours.toFixed(2)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{row.confidence}%</TableCell>
-                  <TableCell>{row.status}</TableCell>
-                </TableRow>
-              ))
+              filteredEmployees.map((emp) => {
+                // DailyAttendance groups all sessions for an employee on a given day
+                const daily = attendanceRows.find(r => r.employeeIdRaw === emp.id);
+                const isCheckedIn = daily?.status === "Active";
+                const hasAttendance = !!daily;
+
+                const displayCheckIn = daily ? daily.firstIn : "-";
+                const displayCheckOut = daily ? daily.lastOut : "-";
+                const sessionSummary = daily && daily.sessions.length > 1
+                  ? daily.sessions.map(s => `${s.checkIn.slice(11,16)}-${s.checkOut === "-" ? "now" : s.checkOut.slice(11,16)}`).join(", ")
+                  : null;
+
+                return (
+                  <TableRow key={emp.id}>
+                    <TableCell>
+                      <div className="font-medium">{emp.name}</div>
+                      <div className="text-xs text-muted-foreground">{emp.empCode}</div>
+                    </TableCell>
+                    <TableCell>{emp.department}</TableCell>
+                    <TableCell className="tabular-nums">
+                      <div>{displayCheckIn}</div>
+                      {sessionSummary && <div className="text-[10px] text-muted-foreground">{sessionSummary}</div>}
+                    </TableCell>
+                    <TableCell className="tabular-nums">{displayCheckOut}</TableCell>
+                    <TableCell>
+                      <Badge variant={isCheckedIn ? "default" : daily?.status === "Half Day" ? "outline" : hasAttendance ? "secondary" : "destructive"}>
+                        {isCheckedIn ? "Active" : daily?.status ?? "Absent"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        {!isCheckedIn && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-primary hover:text-primary"
+                            disabled={processingId === emp.id || date !== today()}
+                            onClick={() => handleManualCheckIn(emp.id)}
+                          >
+                            {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
+                            Check-In
+                          </Button>
+                        )}
+                        {isCheckedIn && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-accent hover:text-accent"
+                            disabled={processingId === emp.id || date !== today()}
+                            onClick={() => handleManualCheckOut(emp.id)}
+                          >
+                            {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="mr-1.5 h-4 w-4" />}
+                            Check-Out
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </div>
     </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
-      <span>{label}</span>
-      {children}
-    </label>
   );
 }

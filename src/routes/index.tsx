@@ -108,8 +108,8 @@ function LoginPage() {
               </Link>
             </div>
             <div className="text-center text-xs">
-              <Link to="/attendance" className="text-primary hover:underline">
-                Open attendance scanner
+              <Link to="/kiosk" className="text-primary hover:underline">
+                Open attendance terminal
               </Link>
             </div>
           </form>

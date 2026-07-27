@@ -78,15 +78,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Hivetree HRMS — Calm HR for growing teams" },
+      { title: "CLEANUP — Laundry & Dry Cleaning Management" },
       {
         name: "description",
-        content: "A modern HR command center: attendance, payroll, and workforce insights.",
+        content: "A modern management system for CLEANUP laundry & dry cleaning showrooms.",
       },
-      { property: "og:title", content: "Hivetree HRMS" },
+      { property: "og:title", content: "CLEANUP" },
       {
         property: "og:description",
-        content: "A modern HR command center: attendance, payroll, and workforce insights.",
+        content: "A modern management system for CLEANUP laundry & dry cleaning showrooms.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

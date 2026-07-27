@@ -4,13 +4,13 @@ import type { CompanyReportData, SalaryReportRow } from "./hrms-db";
 
 type PdfDoc = jsPDF & { lastAutoTable?: { finalY: number } };
 
-const BLUE = [28, 87, 155] as const;
-const BLUE_DARK = [16, 52, 96] as const;
-const BLUE_SOFT = [229, 240, 252] as const;
-const BORDER = [206, 214, 224] as const;
-const TEXT = [31, 41, 55] as const;
-const MUTED = [99, 115, 129] as const;
-const ROW_ALT = [248, 250, 252] as const;
+const BLUE = [28, 87, 155] as [number, number, number];
+const BLUE_DARK = [16, 52, 96] as [number, number, number];
+const BLUE_SOFT = [229, 240, 252] as [number, number, number];
+const BORDER = [206, 214, 224] as [number, number, number];
+const TEXT = [31, 41, 55] as [number, number, number];
+const MUTED = [99, 115, 129] as [number, number, number];
+const ROW_ALT = [248, 250, 252] as [number, number, number];
 
 function money(value: number) {
   return `Rs ${Math.round(value).toLocaleString("en-IN")}`;
@@ -394,9 +394,9 @@ export function downloadCompanyReportPdf(filename: string, report: CompanyReport
       row.employee ?? "-",
       row.employeeId ?? "-",
       row.department ?? "-",
-      row.checkIn,
-      row.checkOut,
-      number(row.hours),
+      row.firstIn,
+      row.lastOut,
+      number(row.totalHours),
       `${Math.round(row.confidence)}%`,
       row.status,
     ]),

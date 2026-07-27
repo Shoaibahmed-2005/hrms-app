@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,15 +19,29 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  Camera,
+  CheckCircle2,
+  Download,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  ScanFace,
+  Search,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import {
   createEmployee,
   deleteEmployee,
   fetchDepartments,
   fetchDesignations,
   fetchEmployees,
+  fetchFaceRegistry,
   initials,
   isDbReady,
+  saveEmployeeFaceDescriptor,
   updateEmployee,
   type Department,
   type Designation,
@@ -50,16 +64,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { downloadCSV } from "@/lib/csv";
+import { getDescriptorFromVideo, loadFaceModels } from "@/lib/face";
 
 export const Route = createFileRoute("/_app/employees")({
   head: () => ({ meta: [{ title: "Employees - Hivetree" }] }),
   component: EmployeesPage,
 });
 
+type CamState = "idle" | "loading" | "streaming" | "captured";
+
 function EmployeesPage() {
   const [employees, setEmployees] = useState<DbEmployee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [designations, setDesignations] = useState<Designation[]>([]);
+  const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +85,18 @@ function EmployeesPage() {
   const [dept, setDept] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"details" | "face">("details");
   const [editing, setEditing] = useState<DbEmployee | null>(null);
+  const [savedEmployeeId, setSavedEmployeeId] = useState<string | null>(null);
+
+  // Face capture state
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [camState, setCamState] = useState<CamState>("idle");
+  const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
+  const [camError, setCamError] = useState<string | null>(null);
+  const [faceCapturing, setFaceCapturing] = useState(false);
+
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -84,14 +113,16 @@ function EmployeesPage() {
   async function loadEmployees() {
     setLoading(true);
     try {
-      const [rows, departmentRows, designationRows] = await Promise.all([
+      const [rows, departmentRows, designationRows, registry] = await Promise.all([
         fetchEmployees(),
         fetchDepartments(),
         fetchDesignations(),
+        fetchFaceRegistry(),
       ]);
       setEmployees(rows);
       setDepartments(departmentRows);
       setDesignations(designationRows);
+      setRegisteredIds(new Set(registry.map((r) => r.employeeId)));
       setForm((current) => ({
         ...current,
         department: current.department || departmentRows[0]?.name || "",
@@ -107,6 +138,7 @@ function EmployeesPage() {
 
   useEffect(() => {
     void loadEmployees();
+    return () => stopCamera();
   }, []);
 
   const filtered = useMemo(
@@ -154,9 +186,10 @@ function EmployeesPage() {
       setEmployees((prev) =>
         editing ? prev.map((row) => (row.id === saved.id ? saved : row)) : [saved, ...prev],
       );
-      toast.success(`${form.name} ${editing ? "updated" : "saved"} to database`);
-      setOpen(false);
-      resetForm();
+      setSavedEmployeeId(saved.id);
+      toast.success(`${form.name} ${editing ? "updated" : "saved"} — now register their face`);
+      // Switch to face tab
+      setActiveTab("face");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save employee");
     } finally {
@@ -165,6 +198,12 @@ function EmployeesPage() {
   }
 
   function resetForm() {
+    stopCamera();
+    setCamState("idle");
+    setFaceDescriptor(null);
+    setCamError(null);
+    setActiveTab("details");
+    setSavedEmployeeId(null);
     setEditing(null);
     setForm({
       name: "",
@@ -181,6 +220,12 @@ function EmployeesPage() {
   }
 
   function startEdit(employee: DbEmployee) {
+    stopCamera();
+    setCamState("idle");
+    setFaceDescriptor(null);
+    setCamError(null);
+    setActiveTab("details");
+    setSavedEmployeeId(employee.id);
     setEditing(employee);
     setForm({
       name: employee.name,
@@ -207,6 +252,70 @@ function EmployeesPage() {
     }
   }
 
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }
+
+  async function startCamera() {
+    setCamError(null);
+    setCamState("loading");
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera not supported. Use HTTPS or localhost.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      await loadFaceModels();
+      setCamState("streaming");
+    } catch (e) {
+      setCamError(e instanceof Error ? e.message : "Camera unavailable");
+      setCamState("idle");
+    }
+  }
+
+  async function captureFace() {
+    if (!videoRef.current) return;
+    setFaceCapturing(true);
+    try {
+      const descriptor = await getDescriptorFromVideo(videoRef.current);
+      if (!descriptor) throw new Error("No face detected — improve lighting and get closer");
+      setFaceDescriptor(Array.from(descriptor));
+      setCamState("captured");
+      stopCamera();
+      toast.success("Face captured! Click 'Save face' to register.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Capture failed");
+    } finally {
+      setFaceCapturing(false);
+    }
+  }
+
+  async function saveFace() {
+    const employeeId = savedEmployeeId ?? editing?.id;
+    if (!employeeId || !faceDescriptor) return;
+    try {
+      await saveEmployeeFaceDescriptor(employeeId, faceDescriptor);
+      setRegisteredIds((prev) => new Set([...prev, employeeId]));
+      toast.success("Face registered successfully!");
+      setOpen(false);
+      resetForm();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save face");
+    }
+  }
+
+  function skipFace() {
+    setOpen(false);
+    resetForm();
+  }
+
   function exportCsv() {
     downloadCSV(
       "employees.csv",
@@ -226,6 +335,9 @@ function EmployeesPage() {
     );
     toast.success("Employees exported");
   }
+
+  const currentEmployeeId = savedEmployeeId ?? editing?.id ?? null;
+  const isAlreadyRegistered = currentEmployeeId ? registeredIds.has(currentEmployeeId) : false;
 
   return (
     <div>
@@ -256,129 +368,290 @@ function EmployeesPage() {
                   Add employee
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-lg">
                 <DialogHeader>
                   <DialogTitle>{editing ? "Edit employee" : "Add employee"}</DialogTitle>
                 </DialogHeader>
-                <form className="grid gap-3" onSubmit={submit}>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Full name">
-                      <Input
-                        value={form.name}
-                        onChange={(event) => setForm({ ...form, name: event.target.value })}
-                        required
-                      />
-                    </Field>
-                    <Field label="Email">
-                      <Input
-                        type="email"
-                        value={form.email}
-                        onChange={(event) => setForm({ ...form, email: event.target.value })}
-                        placeholder="optional"
-                      />
-                    </Field>
-                    <Field label="Designation">
-                      <select
-                        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                        value={form.role}
-                        onChange={(event) => setForm({ ...form, role: event.target.value })}
-                        disabled={designations.length === 0}
-                      >
-                        {designations.length === 0 ? (
-                          <option value="">Add designations in Settings</option>
-                        ) : null}
-                        {designationNames.map((designation) => (
-                          <option key={designation} value={designation}>
-                            {designation}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="Department">
-                      <select
-                        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                        value={form.department}
-                        onChange={(event) => setForm({ ...form, department: event.target.value })}
-                        disabled={departments.length === 0}
-                      >
-                        {departments.length === 0 ? (
-                          <option value="">Add departments in Settings</option>
-                        ) : null}
-                        {departmentNames.map((department) => (
-                          <option key={department} value={department}>
-                            {department}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="Pay type">
-                      <select
-                        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                        value={form.payType}
-                        onChange={(event) =>
-                          setForm({
-                            ...form,
-                            payType: event.target.value as "monthly" | "hourly",
-                          })
-                        }
-                      >
-                        <option value="monthly">Monthly paid</option>
-                        <option value="hourly">Hourly paid</option>
-                      </select>
-                    </Field>
-                    <Field label={form.payType === "hourly" ? "Hourly rate" : "Monthly salary"}>
-                      <Input
-                        type="number"
-                        value={form.salary}
-                        onChange={(event) => setForm({ ...form, salary: event.target.value })}
-                      />
-                    </Field>
-                    <Field label="Fixed bonus">
-                      <Input
-                        type="number"
-                        value={form.fixedBonus}
-                        onChange={(event) => setForm({ ...form, fixedBonus: event.target.value })}
-                      />
-                    </Field>
-                    <Field label="Contact number">
-                      <Input
-                        value={form.phone}
-                        onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                        placeholder="+91 9..."
-                      />
-                    </Field>
-                    <Field label="Reporting manager">
-                      <Input
-                        value={form.manager}
-                        onChange={(event) => setForm({ ...form, manager: event.target.value })}
-                      />
-                    </Field>
-                    {editing ? (
-                      <Field label="Status">
+
+                {/* Tabs */}
+                <div className="flex gap-1 rounded-lg border bg-muted/40 p-1">
+                  <button
+                    type="button"
+                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      activeTab === "details"
+                        ? "bg-background shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => setActiveTab("details")}
+                  >
+                    Details
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      activeTab === "face"
+                        ? "bg-background shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => setActiveTab("face")}
+                  >
+                    <ScanFace className="h-3.5 w-3.5" />
+                    Face Registration
+                    {isAlreadyRegistered && (
+                      <CheckCircle2 className="h-3 w-3 text-green-500" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Details Tab */}
+                {activeTab === "details" && (
+                  <form className="grid gap-3" onSubmit={submit}>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label="Full name">
+                        <Input
+                          value={form.name}
+                          onChange={(event) => setForm({ ...form, name: event.target.value })}
+                          required
+                        />
+                      </Field>
+                      <Field label="Email">
+                        <Input
+                          type="email"
+                          value={form.email}
+                          onChange={(event) => setForm({ ...form, email: event.target.value })}
+                          placeholder="optional"
+                        />
+                      </Field>
+                      <Field label="Designation">
                         <select
                           className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                          value={form.status}
-                          onChange={(event) => setForm({ ...form, status: event.target.value })}
+                          value={form.role}
+                          onChange={(event) => setForm({ ...form, role: event.target.value })}
+                          disabled={designations.length === 0}
                         >
-                          <option value="Active">Active</option>
-                          <option value="Inactive">Inactive</option>
+                          {designations.length === 0 ? (
+                            <option value="">Add designations in Settings</option>
+                          ) : null}
+                          {designationNames.map((designation) => (
+                            <option key={designation} value={designation}>
+                              {designation}
+                            </option>
+                          ))}
                         </select>
                       </Field>
-                    ) : null}
+                      <Field label="Department">
+                        <select
+                          className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                          value={form.department}
+                          onChange={(event) => setForm({ ...form, department: event.target.value })}
+                          disabled={departments.length === 0}
+                        >
+                          {departments.length === 0 ? (
+                            <option value="">Add departments in Settings</option>
+                          ) : null}
+                          {departmentNames.map((department) => (
+                            <option key={department} value={department}>
+                              {department}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Pay type">
+                        <select
+                          className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                          value={form.payType}
+                          onChange={(event) =>
+                            setForm({
+                              ...form,
+                              payType: event.target.value as "monthly" | "hourly",
+                            })
+                          }
+                        >
+                          <option value="monthly">Monthly paid</option>
+                          <option value="hourly">Hourly paid</option>
+                        </select>
+                      </Field>
+                      <Field label={form.payType === "hourly" ? "Hourly rate" : "Monthly salary"}>
+                        <Input
+                          type="number"
+                          value={form.salary}
+                          onChange={(event) => setForm({ ...form, salary: event.target.value })}
+                        />
+                      </Field>
+                      <Field label="Fixed bonus">
+                        <Input
+                          type="number"
+                          value={form.fixedBonus}
+                          onChange={(event) => setForm({ ...form, fixedBonus: event.target.value })}
+                        />
+                      </Field>
+                      <Field label="Contact number">
+                        <Input
+                          value={form.phone}
+                          onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                          placeholder="+92 3..."
+                        />
+                      </Field>
+                      <Field label="Reporting manager">
+                        <Input
+                          value={form.manager}
+                          onChange={(event) => setForm({ ...form, manager: event.target.value })}
+                        />
+                      </Field>
+                      {editing ? (
+                        <Field label="Status">
+                          <select
+                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                            value={form.status}
+                            onChange={(event) => setForm({ ...form, status: event.target.value })}
+                          >
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                          </select>
+                        </Field>
+                      ) : null}
+                    </div>
+                    <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                      {editing
+                        ? "Update details then switch to the Face Registration tab to update the biometric."
+                        : "Save the employee first, then you'll be taken to register their face for attendance."}
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="submit"
+                        disabled={saving || departments.length === 0 || designations.length === 0}
+                      >
+                        {saving ? "Saving..." : editing ? "Update & Register Face →" : "Save & Register Face →"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                )}
+
+                {/* Face Tab */}
+                {activeTab === "face" && (
+                  <div className="space-y-3">
+                    {!currentEmployeeId ? (
+                      <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
+                        <ScanFace className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                        Save the employee details first, then register their face here.
+                        <br />
+                        <button
+                          type="button"
+                          className="mt-2 text-primary underline underline-offset-2"
+                          onClick={() => setActiveTab("details")}
+                        >
+                          ← Go to Details
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {isAlreadyRegistered && camState === "idle" && !faceDescriptor && (
+                          <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
+                            <CheckCircle2 className="h-4 w-4 shrink-0" />
+                            Face already registered. You can re-capture to update it.
+                          </div>
+                        )}
+
+                        {/* Camera view */}
+                        <div className="relative mx-auto flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border bg-muted">
+                          <video
+                            ref={videoRef}
+                            className="h-full w-full scale-x-[-1] object-cover"
+                            muted
+                            playsInline
+                          />
+
+                          {camState === "captured" && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 text-sm">
+                              <CheckCircle2 className="h-10 w-10 text-green-500" />
+                              <span className="font-medium">Face captured successfully</span>
+                              <span className="text-xs text-muted-foreground">
+                                Click "Save face" to register, or re-capture
+                              </span>
+                            </div>
+                          )}
+
+                          {(camState === "idle" || camState === "loading") && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/80">
+                              {camState === "loading" ? (
+                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                              ) : (
+                                <Camera className="h-8 w-8 opacity-40" />
+                              )}
+                              <span className="text-sm text-muted-foreground">
+                                {camState === "loading" ? "Starting camera & loading models..." : "Camera preview"}
+                              </span>
+                              {camState === "idle" && (
+                                <Button size="sm" onClick={startCamera}>
+                                  <Camera className="mr-1.5 h-4 w-4" />
+                                  Start camera
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {camError && (
+                          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                            <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            {camError}
+                          </div>
+                        )}
+
+                        {/* Action buttons */}
+                        <div className="flex gap-2">
+                          {camState === "streaming" && (
+                            <>
+                              <Button
+                                className="flex-1"
+                                onClick={captureFace}
+                                disabled={faceCapturing}
+                              >
+                                {faceCapturing ? (
+                                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <ScanFace className="mr-1.5 h-4 w-4" />
+                                )}
+                                {faceCapturing ? "Detecting..." : "Capture face"}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  stopCamera();
+                                  setCamState("idle");
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </>
+                          )}
+                          {camState === "captured" && faceDescriptor && (
+                            <>
+                              <Button className="flex-1" onClick={saveFace}>
+                                <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                                Save face
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setFaceDescriptor(null);
+                                  setCamState("idle");
+                                }}
+                              >
+                                Re-capture
+                              </Button>
+                            </>
+                          )}
+                          {camState === "idle" && (
+                            <Button variant="ghost" size="sm" className="ml-auto" onClick={skipFace}>
+                              Skip for now
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-                    This saves the employee profile row to Supabase. Actual login accounts should be
-                    created through Supabase Auth or your admin provisioning flow.
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      type="submit"
-                      disabled={saving || departments.length === 0 || designations.length === 0}
-                    >
-                      {saving ? "Saving..." : editing ? "Update employee" : "Save employee"}
-                    </Button>
-                  </DialogFooter>
-                </form>
+                )}
               </DialogContent>
             </Dialog>
           </>
@@ -433,6 +706,7 @@ function EmployeesPage() {
               <TableHead>Role</TableHead>
               <TableHead>Pay type</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Face</TableHead>
               <TableHead className="text-right">Pay</TableHead>
               <TableHead className="w-8"></TableHead>
             </TableRow>
@@ -440,7 +714,7 @@ function EmployeesPage() {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
                   {loading ? "Loading employees..." : "No employee records found in the database."}
                 </TableCell>
               </TableRow>
@@ -481,6 +755,19 @@ function EmployeesPage() {
                     >
                       {employee.status}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {registeredIds.has(employee.id) ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Registered
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <XCircle className="h-3.5 w-3.5" />
+                        Missing
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     Rs {employee.salary.toLocaleString("en-IN")}

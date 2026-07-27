@@ -33,6 +33,13 @@ const FALLBACK: CompanySettings = {
   shiftEnd: "18:30",
   overtimeMultiplier: 1.5,
   attendanceCooldownMinutes: 1,
+  halfDayThreshold: 4,
+  fullDayHours: 8,
+  graceMinutes: 10,
+  leaveDays: ["Sunday"],
+  otAutomated: false,
+  perfectAttendanceReward: 0,
+  automatedIncentivesEnabled: false,
 };
 
 function SettingsPage() {
@@ -47,11 +54,14 @@ function SettingsPage() {
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [editingDesignation, setEditingDesignation] = useState<Designation | null>(null);
   const [saving, setSaving] = useState(false);
+  // Raw text state for leave days so commas can be typed without being stripped immediately
+  const [leaveDaysText, setLeaveDaysText] = useState("");
 
   useEffect(() => {
     Promise.all([fetchCompanySettings(), fetchDesignations(), fetchDepartments()])
       .then(([settings, designationRows, departmentRows]) => {
         setForm(settings);
+        setLeaveDaysText((settings.leaveDays || []).join(" "));
         setDesignations(designationRows);
         setDepartments(departmentRows);
       })
@@ -69,6 +79,11 @@ function SettingsPage() {
         faceThreshold: Number(form.faceThreshold),
         overtimeMultiplier: Number(form.overtimeMultiplier),
         attendanceCooldownMinutes: Number(form.attendanceCooldownMinutes),
+        halfDayThreshold: Number(form.halfDayThreshold),
+        fullDayHours: Number(form.fullDayHours),
+        graceMinutes: Number(form.graceMinutes),
+        perfectAttendanceReward: Number(form.perfectAttendanceReward),
+        leaveDays: leaveDaysText.split(/\s+/).map((s) => s.trim()).filter(Boolean),
       });
       toast.success("Company settings saved");
     } catch (error) {
@@ -195,7 +210,7 @@ function SettingsPage() {
         </section>
 
         <section className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)]">
-          <Header icon={Clock} title="Work policies" />
+          <Header icon={Clock} title="Shift Timings" />
           <div className="mt-4 grid gap-3">
             <Field label="Shift start">
               <Input
@@ -211,6 +226,38 @@ function SettingsPage() {
                 onChange={(event) => setForm({ ...form, shiftEnd: event.target.value })}
               />
             </Field>
+          </div>
+        </section>
+
+        <section className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)] lg:col-span-2">
+          <Header icon={Clock} title="Attendance Rules" />
+          <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Field label="Full-day hours">
+              <Input
+                type="number"
+                min="1"
+                step="0.5"
+                value={form.fullDayHours}
+                onChange={(event) => setForm({ ...form, fullDayHours: Number(event.target.value) })}
+              />
+            </Field>
+            <Field label="Half-day threshold (hours)">
+              <Input
+                type="number"
+                min="1"
+                step="0.5"
+                value={form.halfDayThreshold}
+                onChange={(event) => setForm({ ...form, halfDayThreshold: Number(event.target.value) })}
+              />
+            </Field>
+            <Field label="Grace period (minutes)">
+              <Input
+                type="number"
+                min="0"
+                value={form.graceMinutes}
+                onChange={(event) => setForm({ ...form, graceMinutes: Number(event.target.value) })}
+              />
+            </Field>
             <Field label="Overtime multiplier">
               <Input
                 type="number"
@@ -219,6 +266,56 @@ function SettingsPage() {
                 onChange={(event) =>
                   setForm({ ...form, overtimeMultiplier: Number(event.target.value) })
                 }
+              />
+            </Field>
+            <Field label="Automated Overtime">
+               <div className="flex items-center gap-2 mt-2">
+                 <input 
+                   type="checkbox" 
+                   checked={form.otAutomated} 
+                   onChange={(e) => setForm({...form, otAutomated: e.target.checked})} 
+                   className="h-4 w-4"
+                 />
+                 <span className="text-sm">Calculate OT automatically</span>
+               </div>
+            </Field>
+            <Field label="Leave Days (space-separated, e.g. Sunday Friday)">
+              <Input
+                type="text"
+                value={leaveDaysText}
+                onChange={(event) => {
+                  setLeaveDaysText(event.target.value);
+                  setForm({
+                    ...form,
+                    leaveDays: event.target.value.split(/\s+/).map((s) => s.trim()).filter(Boolean),
+                  });
+                }}
+                placeholder="Sunday Friday"
+              />
+            </Field>
+          </div>
+        </section>
+
+        <section className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)] lg:col-span-2">
+          <Header icon={Wallet} title="Incentives" />
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <Field label="Enable Automated Incentives">
+               <div className="flex items-center gap-2 mt-2">
+                 <input 
+                   type="checkbox" 
+                   checked={form.automatedIncentivesEnabled} 
+                   onChange={(e) => setForm({...form, automatedIncentivesEnabled: e.target.checked})} 
+                   className="h-4 w-4"
+                 />
+                 <span className="text-sm">Award perfect attendance automatically</span>
+               </div>
+            </Field>
+            <Field label="Perfect Attendance Reward (₹)">
+              <Input
+                type="number"
+                min="0"
+                value={form.perfectAttendanceReward}
+                onChange={(event) => setForm({ ...form, perfectAttendanceReward: Number(event.target.value) })}
               />
             </Field>
           </div>

@@ -209,9 +209,16 @@ function ReportsPage() {
                   </TableCell>
                   <TableCell>{row.department ?? "-"}</TableCell>
                   <TableCell className="tabular-nums">{row.date}</TableCell>
-                  <TableCell className="tabular-nums">{row.checkIn}</TableCell>
-                  <TableCell className="tabular-nums">{row.checkOut}</TableCell>
-                  <TableCell className="text-right tabular-nums">{row.hours.toFixed(2)}</TableCell>
+                  <TableCell className="tabular-nums">
+                    <div>{row.firstIn}</div>
+                    {row.sessions.length > 1 && (
+                      <div className="text-[10px] text-muted-foreground">
+                        {row.sessions.map(s => `${s.checkIn.slice(11,16)}-${s.checkOut === "-" ? "active" : s.checkOut.slice(11,16)}`).join(", ")}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="tabular-nums">{row.lastOut}</TableCell>
+                  <TableCell className="text-right tabular-nums">{row.totalHours.toFixed(2)}</TableCell>
                   <TableCell className="text-right tabular-nums">{row.confidence}%</TableCell>
                   <TableCell>{row.status}</TableCell>
                 </TableRow>

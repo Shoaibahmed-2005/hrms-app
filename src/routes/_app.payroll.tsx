@@ -7,17 +7,12 @@ import { StatCard } from "@/components/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { downloadCSV } from "@/lib/csv";
-import { fetchSalaryReportRows, type SalaryReportRow } from "@/lib/hrms-db";
+import { fetchSalaryReportRows, saveIncentive, type SalaryReportRow } from "@/lib/hrms-db";
 import { downloadSalaryPdf } from "@/lib/pdf";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/_app/payroll")({
   head: () => ({ meta: [{ title: "Payroll - Hivetree" }] }),
@@ -25,12 +20,17 @@ export const Route = createFileRoute("/_app/payroll")({
 });
 
 function PayrollPage() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<SalaryReportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(monthStart());
   const [endDate, setEndDate] = useState(today());
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  
+  const [incentiveOpen, setIncentiveOpen] = useState(false);
+  const [incentiveForm, setIncentiveForm] = useState({ amount: "", reason: "" });
+  const [savingIncentive, setSavingIncentive] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -53,6 +53,7 @@ function PayrollPage() {
       overtime: rows.reduce((sum, row) => sum + row.overtime, 0),
       bonus: rows.reduce((sum, row) => sum + row.bonus, 0),
       deductions: rows.reduce((sum, row) => sum + row.deductions, 0),
+      incentives: rows.reduce((sum, row) => sum + (row.incentives || 0), 0),
     }),
     [rows],
   );
@@ -76,11 +77,36 @@ function PayrollPage() {
   function exportPdf() {
     if (!selected) return toast.error("Select an employee first");
     downloadSalaryPdf(`${selected.empCode}-salary-report.pdf`, selected, {
-      title: "Hivetree Payroll Report",
+      title: "CleanUp Payroll Report",
       startDate,
       endDate,
     });
     toast.success(`${selected.name}'s salary report downloaded`);
+  }
+
+  async function handleAddIncentive(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    if (!incentiveForm.amount || !incentiveForm.reason) return toast.error("Fill all fields");
+    setSavingIncentive(true);
+    try {
+      await saveIncentive({
+        employeeId: selected.employeeId,
+        type: "manual",
+        reason: incentiveForm.reason,
+        amount: Number(incentiveForm.amount),
+        month: startDate.slice(0, 7),
+        createdBy: user?.name || "Manager"
+      });
+      toast.success("Manual incentive added");
+      setIncentiveOpen(false);
+      setIncentiveForm({ amount: "", reason: "" });
+      load(); // Reload payroll
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to add incentive");
+    } finally {
+      setSavingIncentive(false);
+    }
   }
 
   return (
@@ -94,10 +120,41 @@ function PayrollPage() {
               <Download className="mr-1.5 h-4 w-4" />
               CSV
             </Button>
-            <Button size="sm" onClick={exportPdf} disabled={!selected}>
+            <Button size="sm" variant="outline" onClick={exportPdf} disabled={!selected}>
               <FileText className="mr-1.5 h-4 w-4" />
               {selected ? `${selected.name}'s salary report` : "Select an employee"}
             </Button>
+            <Dialog open={incentiveOpen} onOpenChange={setIncentiveOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" disabled={!selected}>
+                   Add Incentive
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Manual Incentive</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleAddIncentive} className="space-y-4">
+                  <div className="space-y-1.5">
+                     <label className="text-sm font-medium">Employee</label>
+                     <Input value={selected?.name || ""} disabled />
+                  </div>
+                  <div className="space-y-1.5">
+                     <label className="text-sm font-medium">Reason</label>
+                     <Input value={incentiveForm.reason} onChange={e => setIncentiveForm({...incentiveForm, reason: e.target.value})} placeholder="e.g. Extra shift, Performance" required />
+                  </div>
+                  <div className="space-y-1.5">
+                     <label className="text-sm font-medium">Amount (₹)</label>
+                     <Input type="number" min="1" value={incentiveForm.amount} onChange={e => setIncentiveForm({...incentiveForm, amount: e.target.value})} required />
+                  </div>
+                  <div className="flex justify-end">
+                     <Button type="submit" disabled={savingIncentive}>
+                       {savingIncentive ? "Saving..." : "Save Incentive"}
+                     </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
           </>
         }
       />
@@ -154,7 +211,11 @@ function PayrollPage() {
           value={`Rs ${totals.deductions.toLocaleString("en-IN")}`}
           icon={MinusCircle}
         />
-        <StatCard label="Reports" value={rows.length ? "Ready" : "-"} delta="Manager only" />
+        <StatCard
+          label="Incentives"
+          value={`Rs ${totals.incentives.toLocaleString("en-IN")}`}
+          icon={Wallet}
+        />
       </div>
 
       <div className="mt-6 overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elevate-sm)]">
@@ -169,6 +230,7 @@ function PayrollPage() {
               <TableHead className="text-right">Base</TableHead>
               <TableHead className="text-right">Overtime</TableHead>
               <TableHead className="text-right">Bonus</TableHead>
+              <TableHead className="text-right">Incentives</TableHead>
               <TableHead className="text-right">Deductions</TableHead>
               <TableHead className="text-right">Net</TableHead>
               <TableHead>Status</TableHead>
@@ -177,7 +239,7 @@ function PayrollPage() {
           <TableBody>
             {filteredRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="py-12 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={12} className="py-12 text-center text-sm text-muted-foreground">
                   {loading ? "Loading salary report..." : "No payroll rows found."}
                 </TableCell>
               </TableRow>
@@ -220,6 +282,9 @@ function PayrollPage() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     Rs {row.bonus.toLocaleString("en-IN")}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-success">
+                    +Rs {(row.incentives || 0).toLocaleString("en-IN")}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
                     -Rs {row.deductions.toLocaleString("en-IN")}

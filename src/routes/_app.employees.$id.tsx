@@ -33,7 +33,9 @@ export const Route = createFileRoute("/_app/employees/$id")({
 });
 
 function EmployeeProfile() {
-  const { employee, attendance } = Route.useLoaderData();
+  const data = Route.useLoaderData();
+  if (!data) return null;
+  const { employee, attendance } = data as { employee: any, attendance: any };
   return (
     <div>
       <Link
@@ -55,7 +57,7 @@ function EmployeeProfile() {
           <div className="mb-4 text-sm font-semibold">Recent attendance</div>
           <div className="divide-y">
             {attendance.length ? (
-              attendance.map((row) => (
+              attendance.map((row: any) => (
                 <div key={row.id} className="grid grid-cols-5 items-center py-2.5 text-sm">
                   <div className="col-span-2 tabular-nums text-muted-foreground">{row.date}</div>
                   <div className="tabular-nums">{row.checkIn}</div>

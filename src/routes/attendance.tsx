@@ -1,12 +1,14 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowLeft,
   Camera,
   CheckCircle2,
   Loader2,
+  LogIn,
+  LogOut,
   RotateCcw,
   ScanFace,
-  UserPlus,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,9 +28,13 @@ import {
   type CompanySettings,
   type FaceRegistryEntry,
 } from "@/lib/hrms-db";
+import { z } from "zod";
 
 export const Route = createFileRoute("/attendance")({
-  head: () => ({ meta: [{ title: "Attendance Scan - Hivetree" }] }),
+  head: () => ({ meta: [{ title: "Attendance - HRMS" }] }),
+  validateSearch: z.object({
+    action: z.enum(["in", "out"]).optional(),
+  }),
   component: AttendanceScannerPage,
 });
 
@@ -39,11 +45,13 @@ function confidenceFromDistance(distance: number) {
 }
 
 function AttendanceScannerPage() {
+  const { action } = Route.useSearch();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef(false);
   const cooldownRef = useRef<number | null>(null);
-  const employeeCooldownsRef = useRef(new Map<string, number>());
+  // Track per-employee last action to enforce check-in/out order
+  const employeeLastAction = useRef(new Map<string, "in" | "out">());
   const [registry, setRegistry] = useState<FaceRegistryEntry[]>([]);
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [state, setState] = useState<ScanState>("booting");
@@ -57,7 +65,6 @@ function AttendanceScannerPage() {
       stopCamera();
       if (cooldownRef.current) window.clearTimeout(cooldownRef.current);
     };
-    // The scanner boots once on mount and keeps its own scan loop/cooldown refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -65,11 +72,10 @@ function AttendanceScannerPage() {
     setState("booting");
     setMessage("Loading face scanner...");
     try {
-      const registeredFacesPromise = fetchFaceRegistry();
-      const companySettingsPromise = fetchCompanySettings();
-      const modelsPromise = loadFaceModels();
-
       setMessage("Starting camera...");
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera not supported. Please ensure you are using HTTPS or localhost.");
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: cameraConstraints(),
       });
@@ -81,9 +87,9 @@ function AttendanceScannerPage() {
 
       setMessage("Loading face models...");
       const [registeredFaces, companySettings] = await Promise.all([
-        registeredFacesPromise,
-        companySettingsPromise,
-        modelsPromise,
+        fetchFaceRegistry(),
+        fetchCompanySettings(),
+        loadFaceModels(),
       ]);
       setRegistry(registeredFaces);
       setSettings(companySettings);
@@ -94,12 +100,18 @@ function AttendanceScannerPage() {
       }
 
       setState("ready");
-      setMessage("Look at the camera");
+      setMessage(action === "out" ? "Face scan for Check-Out" : "Face scan for Check-In");
       scanLoop(registeredFaces, companySettings);
     } catch (error) {
       console.error(error);
       setState("error");
-      setMessage(error instanceof Error ? error.message : "Camera unavailable");
+      setMessage(
+        error instanceof Error
+          ? error.message.includes("Devices not found") || error.message.includes("denied")
+            ? "Camera access denied. Please allow camera access and refresh."
+            : error.message
+          : "Camera unavailable"
+      );
     }
   }
 
@@ -144,7 +156,6 @@ function AttendanceScannerPage() {
           }))
           .sort((a, b) => a.distance - b.distance);
         const best = ranked[0];
-
         const runnerUp = ranked[1];
         const score = confidenceFromDistance(best?.distance ?? Number.POSITIVE_INFINITY);
         const threshold = activeSettings?.faceThreshold ?? 80;
@@ -161,71 +172,83 @@ function AttendanceScannerPage() {
           setMessage(
             runnerUp
               ? "Face match is ambiguous. Try again with one employee centered."
-              : "Face not recognized",
+              : "Face not recognized"
           );
           cooldownRef.current = window.setTimeout(() => {
             setState("ready");
-            setMessage("Try again");
+            setMessage(action === "out" ? "Face scan for Check-Out" : "Face scan for Check-In");
             void tick();
           }, 2500);
           return;
         }
 
-        const cooldownSeconds = Math.max(1, activeSettings?.attendanceCooldownMinutes ?? 1) * 60;
-        const until = employeeCooldownsRef.current.get(best.entry.employeeId) ?? 0;
-        const remaining = Math.ceil((until - Date.now()) / 1000);
-        if (remaining > 0) {
+        const empId = best.entry.employeeId;
+        const lastAction = employeeLastAction.current.get(empId);
+
+        // Enforce check-in/out order
+        if (action === "in" && lastAction === "in") {
           setMatched(best.entry);
           setConfidence(score);
           setState("error");
-          setMessage(
-            `Attendance already recorded. Please wait ${remaining} seconds before scanning again.`,
-          );
-          cooldownRef.current = window.setTimeout(
-            () => {
-              setMatched(null);
-              setConfidence(null);
-              setState("ready");
-              setMessage("Ready for next scan");
-              void tick();
-            },
-            Math.min(remaining, 3) * 1000,
-          );
+          setMessage("Already checked in. Please check out first.");
+          cooldownRef.current = window.setTimeout(() => {
+            setMatched(null);
+            setConfidence(null);
+            setState("ready");
+            setMessage("Face scan for Check-In");
+            void tick();
+          }, 3000);
+          return;
+        }
+
+        if (action === "out" && lastAction !== "in") {
+          setMatched(best.entry);
+          setConfidence(score);
+          setState("error");
+          setMessage("Not checked in yet. Please check in first.");
+          cooldownRef.current = window.setTimeout(() => {
+            setMatched(null);
+            setConfidence(null);
+            setState("ready");
+            setMessage("Face scan for Check-Out");
+            void tick();
+          }, 3000);
           return;
         }
 
         const result = await recordFaceAttendance({
-          employeeId: best.entry.employeeId,
+          employeeId: empId,
           faceConfidence: score,
+          action: action,
         });
 
-        employeeCooldownsRef.current.set(
-          best.entry.employeeId,
-          Date.now() + cooldownSeconds * 1000,
-        );
+        // Track this action for order enforcement
+        if (result.action === "check-in") employeeLastAction.current.set(empId, "in");
+        if (result.action === "check-out") employeeLastAction.current.set(empId, "out");
+
         setMatched(best.entry);
         setConfidence(score);
         setState(result.action === "cooldown" ? "error" : "success");
         setMessage(
           result.action === "check-in"
-            ? `Checked in - ${result.status}`
+            ? `Checked In ✓ — ${result.status}`
             : result.action === "check-out"
-              ? `Checked out - ${result.hours.toFixed(2)}h`
+              ? `Checked Out ✓ — ${(result as any).hours?.toFixed(2)}h worked`
               : result.action === "cooldown"
-                ? `Attendance already recorded. Please wait ${result.waitSeconds} seconds before scanning again.`
-                : `Attendance already complete - ${result.hours.toFixed(2)}h`,
+                ? `Please wait ${result.waitSeconds}s before scanning again.`
+                : `Already complete — ${(result as any).hours?.toFixed(2)}h`
         );
         if (result.action === "cooldown") {
           toast.info(`${best.entry.name}: cooldown active`);
         } else {
-          toast.success(`${best.entry.name}: ${messageForAction(result.action)}`);
+          toast.success(`${best.entry.name}: ${messageForAction(result.action as any)}`);
         }
 
         cooldownRef.current = window.setTimeout(() => {
           setMatched(null);
           setConfidence(null);
           setState("ready");
-          setMessage("Ready for next scan");
+          setMessage(action === "out" ? "Face scan for Check-Out" : "Face scan for Check-In");
           void tick();
         }, 4500);
       } catch (error) {
@@ -234,7 +257,7 @@ function AttendanceScannerPage() {
         setMessage(error instanceof Error ? error.message : "Attendance scan failed");
         cooldownRef.current = window.setTimeout(() => {
           setState("ready");
-          setMessage("Try again");
+          setMessage(action === "out" ? "Face scan for Check-Out" : "Try again");
           void tick();
         }, 3000);
       }
@@ -245,105 +268,157 @@ function AttendanceScannerPage() {
 
   const isSuccess = state === "success";
   const isError = state === "error";
+  const isKioskMode = action === "in" || action === "out";
 
   return (
-    <main className="min-h-screen bg-background px-4 py-6 text-foreground sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
-              Hivetree
+    <main
+      className="h-screen overflow-hidden bg-background text-foreground flex flex-col"
+      style={{ maxHeight: "100dvh" }}
+    >
+      {/*
+        Body — no header at all.
+        Portrait / small screens  → flex-col  (camera on top, status below)
+        Landscape / tablet / desktop → flex-row (camera left, status right)
+      */}
+      <div className="flex flex-1 min-h-0 flex-col landscape:flex-row md:flex-row gap-3 p-3 w-full max-w-6xl mx-auto">
+
+        {/* ── Camera panel ── */}
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elevate-sm)] flex flex-col">
+          <div
+            className={`relative flex-1 overflow-hidden rounded-lg border-2 m-2 bg-black ${
+              isSuccess ? "border-emerald-500" : isError ? "border-destructive" : "border-border"
+            }`}
+          >
+            <video
+              ref={videoRef}
+              className="h-full w-full scale-x-[-1] object-cover"
+              muted
+              playsInline
+            />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_42%,rgba(0,0,0,0.35)_78%)]" />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div
+                className={`flex aspect-[3/4] h-[65%] max-h-[360px] items-center justify-center rounded-[28px] border-2 ${
+                  isSuccess
+                    ? "border-emerald-400 shadow-[0_0_36px_rgba(52,211,153,0.35)]"
+                    : isError
+                      ? "border-red-400 shadow-[0_0_36px_rgba(248,113,113,0.35)]"
+                      : "border-white/70"
+                }`}
+              >
+                {state === "booting" ? (
+                  <Loader2 className="h-10 w-10 animate-spin text-white/85" />
+                ) : (
+                  <ScanFace className="h-14 w-14 text-white/70" />
+                )}
+              </div>
             </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight">Attendance Scan</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground shadow-[var(--shadow-elevate-sm)]">
-              {registry.length} registered
-            </div>
-            <Button asChild size="sm" variant="outline">
-              <Link to="/">
-                <UserPlus className="mr-1.5 h-4 w-4" />
-                Go to Dashboard
-              </Link>
-            </Button>
+
+            {/* Back to Kiosk — floating top-left */}
+            {isKioskMode && (
+              <Button
+                asChild
+                size="sm"
+                variant="secondary"
+                className="absolute left-3 top-3 z-10 bg-black/50 text-white hover:bg-black/70 border-0 backdrop-blur-sm"
+              >
+                <Link to="/kiosk">
+                  <ArrowLeft className="mr-1 h-4 w-4" />
+                  Kiosk
+                </Link>
+              </Button>
+            )}
+
+            {/* Mode badge — bottom-left */}
+            {action && (
+              <div
+                className={`absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-white shadow-lg ${
+                  action === "in" ? "bg-emerald-600/80" : "bg-orange-600/80"
+                }`}
+              >
+                {action === "in" ? <LogIn className="h-3 w-3" /> : <LogOut className="h-3 w-3" />}
+                {action === "in" ? "CHECK-IN" : "CHECK-OUT"}
+              </div>
+            )}
           </div>
         </div>
 
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="overflow-hidden rounded-xl border bg-card p-3 shadow-[var(--shadow-elevate-sm)]">
-            <div
-              className={`relative aspect-[4/3] overflow-hidden rounded-lg border-2 bg-black ${
-                isSuccess ? "border-emerald-500" : isError ? "border-destructive" : "border-border"
-              }`}
-            >
-              <video
-                ref={videoRef}
-                className="h-full w-full scale-x-[-1] object-cover"
-                muted
-                playsInline
-              />
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_42%,rgba(0,0,0,0.35)_78%)]" />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        {/* ── Status / controls panel ──
+            Portrait:  full width, compact height (shrink-0)
+            Landscape: fixed sidebar width, full height
+        */}
+        <div className="shrink-0 landscape:w-[260px] md:w-[260px] flex flex-col gap-2">
+
+          {/* Status card */}
+          <div className="rounded-xl border bg-card px-4 py-3 shadow-[var(--shadow-elevate-sm)] flex items-center gap-3 landscape:flex-col landscape:items-center landscape:text-center landscape:py-4 md:flex-col md:items-center md:text-center md:py-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent">
+              {isSuccess ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              ) : isError ? (
+                <XCircle className="h-5 w-5 text-destructive" />
+              ) : state === "booting" || state === "scanning" ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : (
+                <Camera className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1 landscape:flex-none md:flex-none">
+              <div className="text-base font-semibold leading-snug truncate landscape:whitespace-normal md:whitespace-normal">
+                {matched?.name ?? message}
+              </div>
+              {matched ? (
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {matched.empCode} · {matched.department}
+                  {confidence != null ? <span className="ml-1">· {Math.round(confidence)}%</span> : null}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground mt-0.5">{stateLabel(state)}</div>
+              )}
+              {isSuccess && matched && (
                 <div
-                  className={`flex aspect-[3/4] h-[72%] max-h-[420px] items-center justify-center rounded-[28px] border-2 ${
-                    isSuccess
-                      ? "border-emerald-400 shadow-[0_0_36px_rgba(52,211,153,0.35)]"
-                      : isError
-                        ? "border-red-400 shadow-[0_0_36px_rgba(248,113,113,0.35)]"
-                        : "border-white/70"
+                  className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    action === "out"
+                      ? "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400"
+                      : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
                   }`}
                 >
-                  {state === "booting" ? (
-                    <Loader2 className="h-10 w-10 animate-spin text-white/85" />
-                  ) : (
-                    <ScanFace className="h-14 w-14 text-white/70" />
-                  )}
+                  {action === "out" ? <LogOut className="h-3 w-3" /> : <LogIn className="h-3 w-3" />}
+                  {message}
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
-          <div className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)]">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent">
-              {isSuccess ? (
-                <CheckCircle2 className="h-6 w-6 text-[oklch(var(--success))]" />
-              ) : isError ? (
-                <XCircle className="h-6 w-6 text-destructive" />
-              ) : state === "booting" || state === "scanning" ? (
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              ) : (
-                <Camera className="h-6 w-6 text-muted-foreground" />
-              )}
-            </div>
-            <div className="text-center">
-              <div className="text-xl font-semibold">{matched?.name ?? message}</div>
-              {matched ? (
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {matched.empCode} - {matched.department}
-                  {confidence != null ? ` - ${Math.round(confidence)}% match` : ""}
-                </div>
-              ) : (
-                <div className="mt-1 text-sm text-muted-foreground">{stateLabel(state)}</div>
-              )}
-            </div>
+          {/* Restart */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => {
+              if (cooldownRef.current) window.clearTimeout(cooldownRef.current);
+              scanningRef.current = false;
+              setMatched(null);
+              setConfidence(null);
+              void boot();
+            }}
+          >
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+            Restart scanner
+          </Button>
 
-            <Button
-              variant="outline"
-              className="mt-5 w-full"
-              onClick={() => {
-                if (cooldownRef.current) window.clearTimeout(cooldownRef.current);
-                scanningRef.current = false;
-                setMatched(null);
-                setConfidence(null);
-                void boot();
-              }}
-            >
-              <RotateCcw className="mr-1.5 h-4 w-4" />
-              Restart scanner
-            </Button>
-          </div>
-        </section>
+          {!isKioskMode && (
+            <>
+              <Button asChild variant="secondary" size="sm" className="w-full">
+                <Link to="/kiosk">Use Kiosk Mode</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm" className="w-full text-muted-foreground">
+                <Link to="/">Manager Login</Link>
+              </Button>
+            </>
+          )}
+        </div>
       </div>
+
       <Toaster position="top-center" />
     </main>
   );

@@ -6,8 +6,8 @@ import {
   Wallet,
   BarChart3,
   Sparkles,
-  ScanFace,
   Settings,
+  Megaphone,
   Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,10 +34,9 @@ const NAV: NavGroup[] = [
     label: "Workforce",
     items: [
       { to: "/employees", label: "Employees", icon: Users, roles: ["manager"] },
-      { to: "/face-management", label: "Face Management", icon: ScanFace, roles: ["manager"] },
       {
         to: "/attendance-history",
-        label: "Attendance History",
+        label: "Attendance Management",
         icon: CalendarDays,
         roles: ["manager"],
       },
@@ -46,10 +45,11 @@ const NAV: NavGroup[] = [
   {
     label: "Operations",
     items: [
+      { to: "/ai-prediction", label: "AI Prediction", icon: Sparkles, roles: ["manager"] },
+      { to: "/announcements", label: "Announcements", icon: Megaphone, roles: ["manager"] },
       { to: "/payroll", label: "Payroll", icon: Wallet },
       { to: "/reports", label: "Reports", icon: BarChart3, roles: ["manager"] },
       { to: "/settings", label: "Settings", icon: Settings, roles: ["manager"] },
-      { to: "/ai-prediction", label: "AI Prediction", icon: Sparkles, roles: ["manager"] },
     ],
   },
 ];
@@ -91,13 +91,13 @@ function SidebarContent({ mobile = false }: { mobile?: boolean }) {
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2 border-b px-4">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
-          H
+          C
         </div>
-        <div className="text-sm font-semibold tracking-tight">Hivetree HRMS</div>
+        <div className="text-sm font-semibold tracking-tight">CLEANUP</div>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-4">
         {NAV.map((group) => {
-          const items = group.items.filter((it) => !it.roles || it.roles.includes(role));
+          const items = group.items.filter((it) => !it.roles || it.roles.includes(role as "manager"));
           if (items.length === 0) return null;
           return (
             <div key={group.label} className="mb-5">

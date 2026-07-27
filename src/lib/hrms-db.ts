@@ -1,5 +1,35 @@
 import { isSupabaseConfigured, supabase } from "./supabase";
 
+
+export type IncentiveRow = {
+  id: string;
+  employee_id: string;
+  type: string;
+  reason: string;
+  amount: number;
+  month: string;
+  created_by: string;
+  created_at?: string;
+};
+
+export type Announcement = {
+  id: string;
+  title: string;
+  body: string;
+  active: boolean;
+  createdAt: string;
+  createdBy: string;
+};
+
+export type AnnouncementRow = {
+  id: string;
+  title: string;
+  body: string | null;
+  active: boolean;
+  created_at: string;
+  created_by: string;
+};
+
 export type DbEmployee = {
   id: string;
   empCode: string;
@@ -113,6 +143,13 @@ export type CompanySettings = {
   shiftEnd: string;
   overtimeMultiplier: number;
   attendanceCooldownMinutes: number;
+  halfDayThreshold?: number;
+  fullDayHours?: number;
+  graceMinutes?: number;
+  perfectAttendanceReward?: number;
+  otAutomated?: boolean;
+  leaveDays?: string[];
+  automatedIncentivesEnabled?: boolean;
 };
 
 export type DesignationDeduction = {
@@ -147,9 +184,24 @@ export type FaceResetRequest = {
   managerNote: string;
 };
 
+export type DailyAttendance = {
+  id: string;
+  employeeIdRaw: string | null;
+  employee?: string;
+  employeeId?: string;
+  department?: string;
+  date: string;
+  firstIn: string;
+  lastOut: string;
+  sessions: AttendanceEntry[];
+  totalHours: number;
+  status: string;
+  confidence: number;
+};
+
 export type ManagerAttendanceData = {
   configured: boolean;
-  rows: AttendanceEntry[];
+  rows: DailyAttendance[];
   resetRequests: FaceResetRequest[];
   settings: CompanySettings;
 };
@@ -175,6 +227,7 @@ export type SalaryReportRow = {
   deductions: number;
   net: number;
   status: string;
+  incentives?: number;
 };
 
 export type CompanyReportData = {
@@ -182,7 +235,7 @@ export type CompanyReportData = {
   startDate: string;
   endDate: string;
   employeeCount: number;
-  attendanceRows: AttendanceEntry[];
+  attendanceRows: DailyAttendance[];
   payrollRows: SalaryReportRow[];
   totals: {
     present: number;
@@ -473,7 +526,12 @@ function calculatePayrollRows(
   const workDates = eachDate(startDate, endDate).filter(isWorkday);
   const expectedDays = workDates.length;
   const standardHours = shiftHours(settings);
-  const expectedHours = Math.max(standardHours, expectedDays * standardHours);
+  // Lunch break deduction per worked day (default 1 hour if not set)
+  const lunchBreakHours = Number((settings as any).lunchBreakMinutes ?? 60) / 60;
+  // Payable hours per day = shift hours minus lunch break
+  const payableHoursPerDay = Math.max(0, standardHours - lunchBreakHours);
+  const expectedHours = expectedDays * payableHoursPerDay;
+
   const attendanceByEmployee = new Map<string, AttendanceRow[]>();
   const deductionByDesignation = new Map(
     deductions.map((deduction) => [
@@ -493,17 +551,38 @@ function calculatePayrollRows(
     .filter((employee) => employee.status !== "Inactive")
     .map((employee) => {
       const rows = attendanceByEmployee.get(employee.id) ?? [];
-      const workedDates = new Set(
-        rows
-          .filter((row) => ["Present", "Late", "Completed"].includes(row.status))
-          .map((row) => row.date),
-      );
-      const workedDays = workedDates.size;
+
+      // Group sessions by date, sum hours per day, subtract lunch per day, cap at full-day hours
+      const hoursByDate = new Map<string, number>();
+      rows.forEach((row) => {
+        const h = attendanceHours(row);
+        if (h <= 0) return;
+        const prev = hoursByDate.get(row.date) ?? 0;
+        hoursByDate.set(row.date, prev + h);
+      });
+
+      // Determine worked days (at least halfDayThreshold hours after lunch deduction)
+      const halfDay = settings.halfDayThreshold ?? 4;
+      let workedDays = 0;
+      let totalPayableHours = 0;
+
+      hoursByDate.forEach((rawHours, _date) => {
+        // Deduct lunch break from raw daily hours
+        const payable = Math.max(0, rawHours - lunchBreakHours);
+        // Cap payable hours at the shift's payable hours per day
+        const dailyPayable = Math.min(payable, payableHoursPerDay);
+        if (payable >= halfDay) workedDays++;
+        totalPayableHours += dailyPayable;
+      });
+
+      totalPayableHours = Math.round(totalPayableHours * 100) / 100;
+
       const absentDays = Math.max(0, expectedDays - workedDays);
-      const totalHours =
-        Math.round(rows.reduce((sum, row) => sum + attendanceHours(row), 0) * 100) / 100;
-      const regularHours = Math.min(totalHours, expectedHours);
-      const overtimeHours = Math.max(0, Math.round((totalHours - expectedHours) * 100) / 100);
+      const regularHours = Math.min(totalPayableHours, expectedHours);
+      const overtimeHours = Math.max(
+        0,
+        Math.round((totalPayableHours - expectedHours) * 100) / 100,
+      );
       const bonus = overtimeHours > 0 ? employee.fixedBonus : 0;
       const hourlyRate =
         employee.payType === "hourly"
@@ -516,7 +595,11 @@ function calculatePayrollRows(
       if (employee.payType === "hourly") {
         base = regularHours * employee.hourlyRate;
       } else {
-        base = employee.monthlySalary;
+        // Monthly: prorate by worked days vs expected days
+        base =
+          expectedDays > 0
+            ? (employee.monthlySalary / expectedDays) * workedDays
+            : employee.monthlySalary;
       }
 
       const overtime = overtimeHours * hourlyRate * settings.overtimeMultiplier;
@@ -524,8 +607,8 @@ function calculatePayrollRows(
         employee.payType === "monthly" && expectedDays ? employee.monthlySalary / expectedDays : 0;
       const absentDayDeduction =
         deductionByDesignation.get(employee.role.trim().toLowerCase()) ?? fallbackDailyDeduction;
-      const deductions = absentDays * absentDayDeduction;
-      const net = Math.max(0, base + overtime + bonus - deductions);
+      const absenceDeduction = absentDays * absentDayDeduction;
+      const net = Math.max(0, base + overtime + bonus - absenceDeduction);
 
       return {
         employeeId: employee.id,
@@ -545,7 +628,7 @@ function calculatePayrollRows(
         base: Math.round(base),
         overtime: Math.round(overtime),
         bonus: Math.round(bonus),
-        deductions: Math.round(deductions),
+        deductions: Math.round(absenceDeduction),
         net: Math.round(net),
         status: rows.some((row) => !row.check_out) ? "Open" : "Calculated",
       };
@@ -586,7 +669,7 @@ export async function fetchEmployees() {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return ((data ?? []) as EmployeeRow[]).map(mapEmployee);
+  return ((data ?? []) as unknown as unknown as EmployeeRow[]).map(mapEmployee);
 }
 
 export async function fetchEmployeeById(id: string) {
@@ -598,7 +681,7 @@ export async function fetchEmployeeById(id: string) {
     .maybeSingle();
 
   if (error) throw error;
-  return data ? mapEmployee(data as EmployeeRow) : null;
+  return data ? mapEmployee(data as unknown as EmployeeRow) : null;
 }
 
 export async function fetchEmployeeAttendance(employeeId: string, userId?: string | null) {
@@ -617,7 +700,7 @@ export async function fetchEmployeeAttendance(employeeId: string, userId?: strin
 
   if (error) throw error;
   return (
-    (data ?? []) as Array<{
+    (data ?? []) as unknown as Array<{
       id: string;
       date: string;
       check_in: string | null;
@@ -677,7 +760,7 @@ export async function createEmployee(payload: {
     .single();
 
   if (error) throw error;
-  return mapEmployee(data as EmployeeRow);
+  return mapEmployee(data as unknown as EmployeeRow);
 }
 
 export async function updateEmployee(
@@ -718,7 +801,7 @@ export async function updateEmployee(
     .single();
 
   if (error) throw error;
-  return mapEmployee(data as EmployeeRow);
+  return mapEmployee(data as unknown as EmployeeRow);
 }
 
 export async function fetchDepartments() {
@@ -822,8 +905,8 @@ export async function fetchDashboardData(): Promise<DashboardData> {
   const error = employeesRes.error ?? attendanceRes.error;
   if (error) throw error;
 
-  const employees = ((employeesRes.data ?? []) as EmployeeRow[]).map(mapEmployee);
-  const attendance = (attendanceRes.data ?? []) as AttendanceRow[];
+  const employees = ((employeesRes.data ?? []) as unknown as unknown as EmployeeRow[]).map(mapEmployee);
+  const attendance = (attendanceRes.data ?? []) as unknown as unknown as AttendanceRow[];
   const activeEmployees = employees.filter((e) => e.status !== "Inactive");
   const employeeById = new Map(employees.map((e) => [e.id, e]));
 
@@ -892,6 +975,13 @@ export async function fetchCompanySettings(): Promise<CompanySettings> {
       shiftEnd: "18:30",
       overtimeMultiplier: 1.5,
       attendanceCooldownMinutes: 1,
+      halfDayThreshold: 4,
+      fullDayHours: 8,
+      graceMinutes: 10,
+      leaveDays: ["Sunday"],
+      otAutomated: false,
+      perfectAttendanceReward: 0,
+      automatedIncentivesEnabled: false,
     };
   }
 
@@ -911,6 +1001,13 @@ export async function fetchCompanySettings(): Promise<CompanySettings> {
     attendanceCooldownMinutes: Number(
       data?.attendance_cooldown_minutes ?? Math.max(1, Math.ceil(legacyCooldownSeconds / 60)),
     ),
+    halfDayThreshold: Number(data?.half_day_threshold ?? 4),
+    fullDayHours: Number(data?.full_day_hours ?? 8),
+    graceMinutes: Number(data?.grace_minutes ?? 10),
+    leaveDays: Array.isArray(data?.leave_days) ? data.leave_days : ["Sunday"],
+    otAutomated: Boolean(data?.ot_automated ?? false),
+    perfectAttendanceReward: Number(data?.perfect_attendance_reward ?? 0),
+    automatedIncentivesEnabled: Boolean(data?.automated_incentives_enabled ?? false),
   };
 }
 
@@ -923,6 +1020,13 @@ export async function updateCompanySettings(payload: CompanySettings) {
     shift_end: payload.shiftEnd,
     overtime_multiplier: payload.overtimeMultiplier,
     attendance_cooldown_minutes: payload.attendanceCooldownMinutes,
+    half_day_threshold: payload.halfDayThreshold ?? 4,
+    full_day_hours: payload.fullDayHours ?? 8,
+    grace_minutes: payload.graceMinutes ?? 10,
+    leave_days: payload.leaveDays ?? ["Sunday"],
+    ot_automated: payload.otAutomated ?? false,
+    perfect_attendance_reward: payload.perfectAttendanceReward ?? 0,
+    automated_incentives_enabled: payload.automatedIncentivesEnabled ?? false,
     updated_at: new Date().toISOString(),
   });
   if (error) throw error;
@@ -1080,7 +1184,7 @@ export async function fetchFaceRegistry() {
 
   const employeeById = new Map(
     (
-      (employeesRes.data ?? []) as Array<{
+      (employeesRes.data ?? []) as unknown as Array<{
         id: string;
         emp_code: string;
         full_name: string;
@@ -1099,7 +1203,7 @@ export async function fetchFaceRegistry() {
   );
 
   return (
-    (facesRes.data ?? []) as Array<{
+    (facesRes.data ?? []) as unknown as Array<{
       employee_id: string | null;
       descriptor: number[];
       updated_at: string;
@@ -1184,14 +1288,14 @@ export async function fetchFaceResetRequests(userId?: string) {
   if (error) throw error;
 
   const employeeByUser = new Map(
-    ((employeesRes.data ?? []) as EmployeeRow[]).map((row) => [row.user_id, mapEmployee(row)]),
+    ((employeesRes.data ?? []) as unknown as unknown as EmployeeRow[]).map((row) => [row.user_id, mapEmployee(row)]),
   );
   const employeeById = new Map(
-    ((employeesRes.data ?? []) as EmployeeRow[]).map((row) => [row.id, mapEmployee(row)]),
+    ((employeesRes.data ?? []) as unknown as unknown as EmployeeRow[]).map((row) => [row.id, mapEmployee(row)]),
   );
 
   return (
-    (requestsRes.data ?? []) as Array<{
+    (requestsRes.data ?? []) as unknown as Array<{
       id: string;
       user_id: string;
       reason: string;
@@ -1292,6 +1396,7 @@ export async function recordAttendanceCheckOut(userId: string) {
 export async function recordFaceAttendance(payload: {
   employeeId: string;
   faceConfidence: number;
+  action?: "in" | "out";
 }) {
   if (!supabase) throw new Error("Supabase is not configured");
 
@@ -1304,68 +1409,85 @@ export async function recordFaceAttendance(payload: {
 
   const now = new Date().toISOString();
   const today = dateKey();
-  const { data: existing, error: existingError } = await supabase
+  
+  // Get the most recent session for today
+  const { data: existingArray, error: existingError } = await supabase
     .from("attendance")
     .select("id, check_in, check_out")
     .eq("employee_id", payload.employeeId)
     .eq("date", today)
-    .maybeSingle();
+    .order("check_in", { ascending: false })
+    .limit(1);
 
   if (existingError) throw existingError;
+  const existing = existingArray?.[0];
   const cooldownSeconds = Math.max(1, settings.attendanceCooldownMinutes || 1) * 60;
 
-  if (!existing?.check_in) {
+  const forcedOut = payload.action === "out";
+
+  // Should check-in: explicit 'in', or no session, or last session is complete
+  const shouldCheckIn = payload.action === "in" || (!forcedOut && (!existing || !!existing.check_out));
+
+  if (shouldCheckIn) {
+    // Cooldown check if they just checked out
+    if (existing && existing.check_out) {
+      const elapsed = secondsBetween(existing.check_out, now);
+      if (elapsed < cooldownSeconds) {
+        return {
+          action: "cooldown" as const,
+          status: "Cooldown",
+          hours: 0,
+          waitSeconds: cooldownSeconds - elapsed,
+        };
+      }
+    }
+
     const status = attendanceStatusFor(now, settings);
-    const { error } = await supabase.from("attendance").upsert(
-      {
-        employee_id: payload.employeeId,
-        user_id: employee?.user_id ?? null,
-        date: today,
-        check_in: now,
-        face_verified: true,
-        face_confidence: Math.round(payload.faceConfidence),
-        status,
-        hours_worked: 0,
-      },
-      { onConflict: "employee_id,date" },
-    );
+    const { error } = await supabase.from("attendance").insert({
+      employee_id: payload.employeeId,
+      user_id: employee?.user_id ?? null,
+      date: today,
+      check_in: now,
+      face_verified: true,
+      face_confidence: Math.round(payload.faceConfidence),
+      status,
+      hours_worked: 0
+    });
     if (error) throw error;
     return { action: "check-in" as const, status, hours: 0 };
   }
 
-  const lastActionAt = existing.check_out ?? existing.check_in;
-  const elapsed = secondsBetween(lastActionAt, now);
+  // Check-out path: there must be an open session
+  if (!existing || !!existing.check_out) {
+    throw new Error("No open check-in found for today. Please check in first.");
+  }
+
+  // Cooldown check on check-in time
+  const elapsed = secondsBetween(existing.check_in, now);
   if (elapsed < cooldownSeconds) {
     return {
       action: "cooldown" as const,
       status: "Cooldown",
-      hours: existing.check_out ? hoursBetween(existing.check_in, existing.check_out) : 0,
+      hours: 0,
       waitSeconds: cooldownSeconds - elapsed,
     };
   }
 
-  if (!existing.check_out) {
-    const hours = hoursBetween(existing.check_in, now);
-    const { error } = await supabase
-      .from("attendance")
-      .update({
-        check_out: now,
-        hours_worked: hours,
-        face_verified: true,
-        face_confidence: Math.round(payload.faceConfidence),
-      })
-      .eq("id", existing.id);
+  const hours = hoursBetween(existing.check_in, now);
+  const { error: updateError } = await supabase
+    .from("attendance")
+    .update({
+      check_out: now,
+      hours_worked: hours,
+      face_verified: true,
+      face_confidence: Math.round(payload.faceConfidence),
+    })
+    .eq("id", existing.id);
 
-    if (error) throw error;
-    return { action: "check-out" as const, status: "Completed", hours };
-  }
-
-  return {
-    action: "already-complete" as const,
-    status: "Completed",
-    hours: hoursBetween(existing.check_in, existing.check_out),
-  };
+  if (updateError) throw updateError;
+  return { action: "check-out" as const, status: "Completed", hours };
 }
+
 
 export async function fetchManagerAttendanceData(date: string): Promise<ManagerAttendanceData> {
   const settings = await fetchCompanySettings();
@@ -1385,19 +1507,21 @@ export async function fetchManagerAttendanceData(date: string): Promise<ManagerA
   if (error) throw error;
 
   const employeeByUser = new Map(
-    ((employeesRes.data ?? []) as EmployeeRow[]).map((row) => [row.user_id, mapEmployee(row)]),
+    ((employeesRes.data ?? []) as unknown as EmployeeRow[]).map((row) => [row.user_id, mapEmployee(row)]),
   );
   const employeeById = new Map(
-    ((employeesRes.data ?? []) as EmployeeRow[]).map((row) => [row.id, mapEmployee(row)]),
+    ((employeesRes.data ?? []) as unknown as EmployeeRow[]).map((row) => [row.id, mapEmployee(row)]),
+  );
+
+  const rawEntries = ((attendanceRes.data ?? []) as unknown as AttendanceRow[]).map((row) =>
+    mapAttendance(row, employeeByUser, employeeById),
   );
 
   return {
     configured: true,
     settings,
     resetRequests: resetsRes,
-    rows: ((attendanceRes.data ?? []) as AttendanceRow[]).map((row) =>
-      mapAttendance(row, employeeByUser, employeeById),
-    ),
+    rows: aggregateDailyAttendance(rawEntries, settings),
   };
 }
 
@@ -1418,15 +1542,72 @@ export async function fetchSalaryReportRows(startDate = currentMonthStart(), end
   const error = employeesRes.error ?? attendanceRes.error;
   if (error) throw error;
 
-  const employees = ((employeesRes.data ?? []) as EmployeeRow[]).map(mapEmployee);
-  const attendance = (attendanceRes.data ?? []) as AttendanceRow[];
+  const employees = ((employeesRes.data ?? []) as unknown as EmployeeRow[]).map(mapEmployee);
+  const attendance = (attendanceRes.data ?? []) as unknown as AttendanceRow[];
   return calculatePayrollRows(employees, attendance, settings, startDate, endDate, deductionRules);
 }
 
-export async function fetchAttendanceHistory(startDate = dateKey(), endDate = dateKey()) {
-  if (!supabase) return [] as AttendanceEntry[];
+function aggregateDailyAttendance(entries: AttendanceEntry[], settings: CompanySettings): DailyAttendance[] {
+  const grouped = new Map<string, AttendanceEntry[]>();
+  entries.forEach(entry => {
+    const key = (entry.employeeIdRaw ?? "") + "_" + entry.date;
+    const list = grouped.get(key) || [];
+    list.push(entry);
+    grouped.set(key, list);
+  });
 
-  const [employeesRes, attendanceRes] = await Promise.all([
+  const result: DailyAttendance[] = [];
+  const halfDayThreshold = settings.halfDayThreshold ?? 4;
+  const fullDayHours = settings.fullDayHours ?? 8;
+  const lunchBreakHours = Number((settings as any).lunchBreakMinutes ?? 60) / 60;
+
+  grouped.forEach((sessions, _key) => {
+    sessions.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+    const firstIn = sessions[0].checkIn;
+    const lastSession = sessions[sessions.length - 1];
+    const lastOut = lastSession.checkOut !== "-" ? lastSession.checkOut : "-";
+
+    const rawHours = sessions.reduce((sum, s) => sum + s.hours, 0);
+    const payableHours = Math.max(0, rawHours - lunchBreakHours);
+
+    let status = "Absent";
+    const isActive = sessions.some(s => s.checkOut === "-");
+
+    if (isActive) {
+      status = "Active";
+    } else if (payableHours >= fullDayHours - 0.5) {
+      status = "Completed";
+    } else if (payableHours >= halfDayThreshold) {
+      status = "Half Day";
+    } else {
+      status = rawHours > 0 ? "Incomplete" : "Absent";
+    }
+
+    const rep = sessions[0];
+    result.push({
+      id: (rep.employeeIdRaw ?? "") + "_" + rep.date,
+      employeeIdRaw: rep.employeeIdRaw,
+      employee: rep.employee,
+      employeeId: rep.employeeId,
+      department: rep.department,
+      date: rep.date,
+      firstIn,
+      lastOut,
+      sessions,
+      totalHours: payableHours,
+      status,
+      confidence: rep.confidence,
+    });
+  });
+
+  result.sort((a, b) => b.date.localeCompare(a.date) || (a.employee ?? "").localeCompare(b.employee ?? ""));
+  return result;
+}
+
+export async function fetchAttendanceHistory(startDate = dateKey(), endDate = dateKey()): Promise<DailyAttendance[]> {
+  if (!supabase) return [];
+
+  const [employeesRes, attendanceRes, settings] = await Promise.all([
     supabase.from("employees").select(employeeSelect()),
     supabase
       .from("attendance")
@@ -1435,18 +1616,21 @@ export async function fetchAttendanceHistory(startDate = dateKey(), endDate = da
       .lte("date", endDate)
       .order("date", { ascending: false })
       .order("check_in", { ascending: false }),
+    fetchCompanySettings(),
   ]);
 
   const error = employeesRes.error ?? attendanceRes.error;
   if (error) throw error;
 
-  const employees = ((employeesRes.data ?? []) as EmployeeRow[]).map(mapEmployee);
+  const employees = ((employeesRes.data ?? []) as unknown as EmployeeRow[]).map(mapEmployee);
   const employeeByUser = new Map(employees.map((employee) => [employee.userId, employee]));
   const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
 
-  return ((attendanceRes.data ?? []) as AttendanceRow[]).map((row) =>
+  const rawEntries = ((attendanceRes.data ?? []) as unknown as AttendanceRow[]).map((row) =>
     mapAttendance(row, employeeByUser, employeeById),
   );
+
+  return aggregateDailyAttendance(rawEntries, settings);
 }
 
 export async function fetchCompanyReport(
@@ -1474,18 +1658,18 @@ export async function fetchCompanyReport(
   }
 
   const [employeesRes, attendanceRows, payrollRows] = await Promise.all([
-    supabase.from("employees").select(employeeSelect()),
+    supabase.from('employees').select(employeeSelect()),
     fetchAttendanceHistory(startDate, endDate),
     fetchSalaryReportRows(startDate, endDate),
   ]);
 
   if (employeesRes.error) throw employeesRes.error;
-  const employees = ((employeesRes.data ?? []) as EmployeeRow[]).map(mapEmployee);
+  const employees = ((employeesRes.data ?? []) as unknown as unknown as EmployeeRow[]).map(mapEmployee);
   const workDays = eachDate(startDate, endDate).filter(isWorkday).length;
   const expectedAttendances =
-    employees.filter((employee) => employee.status !== "Inactive").length * workDays;
+    employees.filter((employee) => employee.status !== 'Inactive').length * workDays;
   const present = attendanceRows.filter((row) =>
-    ["Present", "Late", "Completed"].includes(row.status),
+    ['Present', 'Late', 'Completed'].includes(row.status),
   ).length;
 
   return {
@@ -1498,7 +1682,7 @@ export async function fetchCompanyReport(
     totals: {
       present,
       absent: Math.max(0, expectedAttendances - present),
-      hours: Math.round(attendanceRows.reduce((sum, row) => sum + row.hours, 0) * 100) / 100,
+      hours: Math.round(attendanceRows.reduce((sum, row) => sum + row.totalHours, 0) * 100) / 100,
       overtime: payrollRows.reduce((sum, row) => sum + row.overtime, 0),
       bonuses: payrollRows.reduce((sum, row) => sum + row.bonus, 0),
       deductions: payrollRows.reduce((sum, row) => sum + row.deductions, 0),
@@ -1506,6 +1690,7 @@ export async function fetchCompanyReport(
     },
   };
 }
+
 
 export async function fetchAIInsights(): Promise<AIInsightsData> {
   const endDate = dateKey();
@@ -1539,9 +1724,9 @@ export async function fetchAIInsights(): Promise<AIInsightsData> {
   const error = employeesRes.error ?? attendanceRes.error;
   if (error) throw error;
 
-  const employees = ((employeesRes.data ?? []) as EmployeeRow[]).map(mapEmployee);
+  const employees = ((employeesRes.data ?? []) as unknown as unknown as EmployeeRow[]).map(mapEmployee);
   const activeEmployees = employees.filter((employee) => employee.status !== "Inactive");
-  const attendance = (attendanceRes.data ?? []) as AttendanceRow[];
+  const attendance = (attendanceRes.data ?? []) as unknown as unknown as AttendanceRow[];
   const standardHours = shiftHours(settings);
   const dates = eachDate(startDate, endDate);
   const workDates = dates.filter(isWorkday);
@@ -1665,4 +1850,129 @@ export async function fetchAIInsights(): Promise<AIInsightsData> {
     insights,
     trend,
   };
+}
+
+
+export async function recordManualCheckIn(employeeId: string, managerId: string) {
+  if (!supabase) throw new Error("Supabase is not configured");
+
+  const [{ data: employee }, settings] = await Promise.all([
+    supabase.from("employees").select("user_id").eq("id", employeeId).single(),
+    fetchCompanySettings()
+  ]);
+
+  const now = new Date().toISOString();
+  const status = attendanceStatusFor(now, settings);
+
+  const { error } = await supabase.from("attendance").insert({
+    employee_id: employeeId,
+    user_id: employee?.user_id ?? null,
+    date: dateKey(),
+    check_in: now,
+    status,
+    hours_worked: 0
+  });
+  if (error) throw error;
+  return { status };
+}
+
+export async function recordManualCheckOut(employeeId: string, managerId: string) {
+  if (!supabase) throw new Error("Supabase is not configured");
+
+  // Find the latest open session for this employee today
+  const { data, error } = await supabase.from("attendance")
+    .select("id, check_in")
+    .eq("employee_id", employeeId)
+    .eq("date", dateKey())
+    .is("check_out", null)
+    .order("check_in", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("No open check-in session found for today.");
+
+  const now = new Date().toISOString();
+  const hours = hoursBetween(data.check_in, now);
+
+  const update = await supabase.from("attendance").update({
+    check_out: now,
+    hours_worked: hours
+  }).eq("id", data.id);
+
+  if (update.error) throw update.error;
+  return { hours };
+}
+
+export async function fetchIncentives(startDate: string, endDate: string) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("incentives")
+    .select("*")
+    .gte("created_at", startDate + "T00:00:00")
+    .lte("created_at", endDate + "T23:59:59");
+  if (error) throw error;
+  return data as unknown as IncentiveRow[];
+}
+
+export async function saveIncentive(payload: { employeeId: string; type: string; reason: string; amount: number; month: string; createdBy: string }) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { error } = await supabase.from("incentives").insert({
+    employee_id: payload.employeeId,
+    type: payload.type,
+    reason: payload.reason,
+    amount: payload.amount,
+    month: payload.month,
+    created_by: payload.createdBy
+  });
+  if (error) throw error;
+}
+
+export async function deleteIncentive(id: string) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { error } = await supabase.from("incentives").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function fetchAnnouncements() {
+  if (!supabase) return [] as Announcement[];
+  const { data, error } = await supabase
+    .from("announcements")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as unknown as AnnouncementRow[]).map(row => ({
+    id: row.id,
+    title: row.title,
+    body: row.body ?? "",
+    active: row.active,
+    createdAt: row.created_at,
+    createdBy: row.created_by
+  }));
+}
+
+export async function saveAnnouncement(payload: { id?: string; title: string; body: string; active: boolean; createdBy: string }) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  if (payload.id) {
+    const { error } = await supabase.from("announcements").update({
+      title: payload.title,
+      body: payload.body,
+      active: payload.active
+    }).eq("id", payload.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("announcements").insert({
+      title: payload.title,
+      body: payload.body,
+      active: payload.active,
+      created_by: payload.createdBy
+    });
+    if (error) throw error;
+  }
+}
+
+export async function deleteAnnouncement(id: string) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { error } = await supabase.from("announcements").delete().eq("id", id);
+  if (error) throw error;
 }
