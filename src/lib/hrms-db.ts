@@ -168,6 +168,8 @@ export type AttendanceEntry = {
   date: string;
   checkIn: string;
   checkOut: string;
+  checkInRaw: string;
+  checkOutRaw: string;
   hours: number;
   status: string;
   confidence: number;
@@ -395,6 +397,8 @@ function mapAttendance(
     date: row.date,
     checkIn: formatClock(row.check_in),
     checkOut: formatClock(row.check_out),
+    checkInRaw: row.check_in ?? "",
+    checkOutRaw: row.check_out ?? "",
     hours: attendanceHours(row),
     status: row.status,
     confidence: Number(row.face_confidence ?? 0),
@@ -911,17 +915,21 @@ export async function fetchDashboardData(): Promise<DashboardData> {
   const employeeById = new Map(employees.map((e) => [e.id, e]));
 
   const todayAttendance = attendance.filter((row) => row.date === today);
-  const presentToday = todayAttendance.filter((row) =>
-    ["Present", "Late", "Completed"].includes(row.status),
-  ).length;
+  const presentToday = new Set(
+    todayAttendance
+      .filter((row) => ["Present", "Late", "Completed", "Active", "Half Day"].includes(row.status))
+      .map((row) => row.employee_id)
+  ).size;
   const absentToday = Math.max(0, activeEmployees.length - presentToday);
 
   const attendanceTrend = Array.from({ length: 7 }).map((_, index) => {
     const iso = dateKey(index - 6);
     const dayAttendance = attendance.filter((row) => row.date === iso);
-    const present = dayAttendance.filter((row) =>
-      ["Present", "Late", "Completed"].includes(row.status),
-    ).length;
+    const present = new Set(
+      dayAttendance
+        .filter((row) => ["Present", "Late", "Completed", "Active", "Half Day"].includes(row.status))
+        .map((row) => row.employee_id)
+    ).size;
     return {
       day: dayLabel(iso),
       present,
@@ -1424,11 +1432,18 @@ export async function recordFaceAttendance(payload: {
   const cooldownSeconds = Math.max(1, settings.attendanceCooldownMinutes || 1) * 60;
 
   const forcedOut = payload.action === "out";
+  // An existing open session means: record exists AND check_out is null/undefined
+  const hasOpenSession = !!existing && !existing.check_out;
 
   // Should check-in: explicit 'in', or no session, or last session is complete
-  const shouldCheckIn = payload.action === "in" || (!forcedOut && (!existing || !!existing.check_out));
+  const shouldCheckIn = payload.action === "in" || (!forcedOut && !hasOpenSession);
 
   if (shouldCheckIn) {
+    // Block double check-in: if there's already an open session, reject
+    if (hasOpenSession) {
+      throw new Error("Already checked in. Please check out first.");
+    }
+
     // Cooldown check if they just checked out
     if (existing && existing.check_out) {
       const elapsed = secondsBetween(existing.check_out, now);
@@ -1458,8 +1473,8 @@ export async function recordFaceAttendance(payload: {
   }
 
   // Check-out path: there must be an open session
-  if (!existing || !!existing.check_out) {
-    throw new Error("No open check-in found for today. Please check in first.");
+  if (!hasOpenSession) {
+    throw new Error("Not checked in yet. Please check in first.");
   }
 
   // Cooldown check on check-in time
@@ -1562,7 +1577,8 @@ function aggregateDailyAttendance(entries: AttendanceEntry[], settings: CompanyS
   const lunchBreakHours = Number((settings as any).lunchBreakMinutes ?? 60) / 60;
 
   grouped.forEach((sessions, _key) => {
-    sessions.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+    // Sort chronologically using the raw ISO string, not the formatted "02:30 PM" string
+    sessions.sort((a, b) => a.checkInRaw.localeCompare(b.checkInRaw));
     const firstIn = sessions[0].checkIn;
     const lastSession = sessions[sessions.length - 1];
     const lastOut = lastSession.checkOut !== "-" ? lastSession.checkOut : "-";
@@ -1855,6 +1871,23 @@ export async function fetchAIInsights(): Promise<AIInsightsData> {
 
 export async function recordManualCheckIn(employeeId: string, managerId: string) {
   if (!supabase) throw new Error("Supabase is not configured");
+
+  // Check only the LATEST session — not any row with check_out=null.
+  // Orphaned rows from the old double-check-in bug also have check_out=null,
+  // and we must not let them block legitimate second check-ins after a checkout.
+  const { data: latestSession, error: latestErr } = await supabase
+    .from("attendance")
+    .select("id, check_out")
+    .eq("employee_id", employeeId)
+    .eq("date", dateKey())
+    .order("check_in", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestErr) throw latestErr;
+  if (latestSession && !latestSession.check_out) {
+    throw new Error("Employee is already checked in. Please check out first.");
+  }
 
   const [{ data: employee }, settings] = await Promise.all([
     supabase.from("employees").select("user_id").eq("id", employeeId).single(),

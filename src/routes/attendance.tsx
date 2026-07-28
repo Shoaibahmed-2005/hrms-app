@@ -183,38 +183,6 @@ function AttendanceScannerPage() {
         }
 
         const empId = best.entry.employeeId;
-        const lastAction = employeeLastAction.current.get(empId);
-
-        // Enforce check-in/out order
-        if (action === "in" && lastAction === "in") {
-          setMatched(best.entry);
-          setConfidence(score);
-          setState("error");
-          setMessage("Already checked in. Please check out first.");
-          cooldownRef.current = window.setTimeout(() => {
-            setMatched(null);
-            setConfidence(null);
-            setState("ready");
-            setMessage("Face scan for Check-In");
-            void tick();
-          }, 3000);
-          return;
-        }
-
-        if (action === "out" && lastAction !== "in") {
-          setMatched(best.entry);
-          setConfidence(score);
-          setState("error");
-          setMessage("Not checked in yet. Please check in first.");
-          cooldownRef.current = window.setTimeout(() => {
-            setMatched(null);
-            setConfidence(null);
-            setState("ready");
-            setMessage("Face scan for Check-Out");
-            void tick();
-          }, 3000);
-          return;
-        }
 
         const result = await recordFaceAttendance({
           employeeId: empId,
@@ -222,7 +190,7 @@ function AttendanceScannerPage() {
           action: action,
         });
 
-        // Track this action for order enforcement
+        // Track this action for order enforcement (session-level fast path)
         if (result.action === "check-in") employeeLastAction.current.set(empId, "in");
         if (result.action === "check-out") employeeLastAction.current.set(empId, "out");
 

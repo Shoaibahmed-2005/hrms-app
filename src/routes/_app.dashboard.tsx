@@ -2,14 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Sparkles, TrendingUp, UserCheck, Users, UserX, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  Legend,
 } from "recharts";
 import { downloadCSV } from "@/lib/csv";
 import { fetchDashboardData, type DashboardData } from "@/lib/hrms-db";
@@ -126,10 +125,16 @@ function ManagerDashboard() {
           <div className="h-64">
             {data.attendanceTrend.length ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
+                <AreaChart
                   data={data.attendanceTrend}
                   margin={{ left: -20, right: 8, top: 8, bottom: 0 }}
                 >
+                  <defs>
+                    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid
                     strokeDasharray="3 3"
                     stroke="var(--color-border)"
@@ -149,7 +154,6 @@ function ManagerDashboard() {
                     axisLine={false}
                   />
                   <Tooltip
-                    cursor={{ fill: 'var(--color-muted)', opacity: 0.2 }}
                     contentStyle={{
                       background: "var(--color-popover)",
                       border: "1px solid var(--color-border)",
@@ -157,22 +161,21 @@ function ManagerDashboard() {
                       fontSize: 12,
                     }}
                   />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar
+                  <Area
+                    type="monotone"
                     dataKey="present"
-                    name="Present"
-                    stackId="a"
-                    fill="var(--color-primary)"
-                    radius={[0, 0, 4, 4]}
+                    stroke="var(--color-primary)"
+                    fill="url(#g1)"
+                    strokeWidth={2}
                   />
-                  <Bar
+                  <Area
+                    type="monotone"
                     dataKey="absent"
-                    name="Absent"
-                    stackId="a"
-                    fill="var(--color-destructive)"
-                    radius={[4, 4, 0, 0]}
+                    stroke="var(--color-destructive)"
+                    fill="transparent"
+                    strokeWidth={1.5}
                   />
-                </BarChart>
+                </AreaChart>
               </ResponsiveContainer>
             ) : (
               <EmptyState

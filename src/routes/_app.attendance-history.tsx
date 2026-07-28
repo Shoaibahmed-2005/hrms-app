@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { Users, CalendarDays, Wallet, UserX, LogIn, LogOut, Loader2 } from "lucide-react";
+import type { JSX } from "react";
+import { Users, CalendarDays, Wallet, UserX, LogIn, LogOut, Loader2, ChevronDown, ChevronRight, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -36,6 +37,12 @@ function today() {
   return new Date().toLocaleDateString("en-CA");
 }
 
+// checkIn / checkOut / firstIn / lastOut are already formatted by formatClock()
+// in hrms-db.ts (e.g. "09:00 AM"), so we just display them directly.
+function displayTime(value: string) {
+  return value || "-";
+}
+
 function AttendanceManagementPage() {
   const { user } = useAuth();
   const [date, setDate] = useState(today());
@@ -45,6 +52,7 @@ function AttendanceManagementPage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,11 +104,22 @@ function AttendanceManagementPage() {
     }
   };
 
+  const toggleExpand = (empId: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(empId)) next.delete(empId);
+      else next.add(empId);
+      return next;
+    });
+  };
+
   const filteredEmployees = employees.filter((emp) =>
     `${emp.name} ${emp.empCode} ${emp.department}`
       .toLowerCase()
       .includes(q.toLowerCase()),
   );
+
+  const isToday = date === today();
 
   return (
     <div>
@@ -110,12 +129,16 @@ function AttendanceManagementPage() {
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Present Today" value={dashboard?.presentToday ?? "..."} icon={CalendarDays} />
+        <StatCard 
+          label="Present Today" 
+          value={dashboard?.totalEmployees ? `${Math.round((dashboard.presentToday / dashboard.totalEmployees) * 100)}%` : "..."} 
+          icon={CalendarDays} 
+        />
         <StatCard label="Total Active" value={dashboard?.totalEmployees ?? "..."} icon={Users} />
         <StatCard label="Total Absent" value={dashboard?.absentToday ?? "..."} icon={UserX} />
         <StatCard
           label="Est. Earnings (Month)"
-          value={dashboard ? `₹${dashboard.payrollTotal.toLocaleString()}` : "..."}
+          value={dashboard ? `Rs ${dashboard.payrollTotal.toLocaleString()}` : "..."}
           icon={Wallet}
         />
       </div>
@@ -143,10 +166,11 @@ function AttendanceManagementPage() {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="w-8"></TableHead>
               <TableHead>Employee</TableHead>
               <TableHead>Department</TableHead>
-              <TableHead>Check-In</TableHead>
-              <TableHead>Check-Out</TableHead>
+              <TableHead>First In</TableHead>
+              <TableHead>Last Out</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -154,7 +178,7 @@ function AttendanceManagementPage() {
           <TableBody>
             {filteredEmployees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
                   {loading ? "Loading..." : "No employees found."}
                 </TableCell>
               </TableRow>
@@ -162,94 +186,192 @@ function AttendanceManagementPage() {
               filteredEmployees.flatMap((emp) => {
                 const daily = attendanceRows.find(r => r.employeeIdRaw === emp.id);
                 const hasAttendance = !!daily && daily.sessions.length > 0;
+                const isExpanded = expanded.has(emp.id);
+                const isProcessing = processingId === emp.id;
 
                 if (!hasAttendance) {
                   return [
                     <TableRow key={emp.id}>
+                      <TableCell className="w-8"></TableCell>
                       <TableCell>
                         <div className="font-medium">{emp.name}</div>
                         <div className="text-xs text-muted-foreground">{emp.empCode}</div>
                       </TableCell>
                       <TableCell>{emp.department}</TableCell>
-                      <TableCell className="tabular-nums">-</TableCell>
-                      <TableCell className="tabular-nums">-</TableCell>
+                      <TableCell className="tabular-nums text-muted-foreground">-</TableCell>
+                      <TableCell className="tabular-nums text-muted-foreground">-</TableCell>
                       <TableCell>
                         <Badge variant="destructive">Absent</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-primary hover:text-primary disabled:opacity-50"
-                            disabled={processingId === emp.id || date !== today()}
-                            onClick={() => handleManualCheckIn(emp.id)}
-                          >
-                            {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
-                            Check-In
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-accent hover:text-accent disabled:opacity-50"
-                            disabled={true}
-                          >
-                            <LogOut className="mr-1.5 h-4 w-4" />
-                            Check-Out
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ];
-                }
-
-                return daily.sessions.map((session, i) => {
-                  const isLatest = i === daily.sessions.length - 1;
-                  const sessionActive = session.checkOut === "-";
-
-                  return (
-                    <TableRow key={session.id}>
-                      <TableCell>
-                        <div className="font-medium">{emp.name}</div>
-                        <div className="text-xs text-muted-foreground">{emp.empCode}</div>
-                      </TableCell>
-                      <TableCell>{emp.department}</TableCell>
-                      <TableCell className="tabular-nums">{session.checkIn}</TableCell>
-                      <TableCell className="tabular-nums">{session.checkOut}</TableCell>
-                      <TableCell>
-                        <Badge variant={sessionActive ? "default" : "secondary"}>
-                          {sessionActive ? "Active" : "Completed"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {isLatest && (
+                        {isToday && (
                           <div className="flex justify-end gap-2">
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-primary hover:text-primary disabled:opacity-50"
-                              disabled={sessionActive || processingId === emp.id || date !== today()}
+                              disabled={isProcessing}
                               onClick={() => handleManualCheckIn(emp.id)}
                             >
-                              {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
+                              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="mr-1.5 h-4 w-4" />}
                               Check-In
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-accent hover:text-accent disabled:opacity-50"
-                              disabled={!sessionActive || processingId === emp.id || date !== today()}
-                              onClick={() => handleManualCheckOut(emp.id)}
+                              disabled={true}
+                              title="Employee has not checked in yet"
                             >
-                              {processingId === emp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="mr-1.5 h-4 w-4" />}
+                              <LogOut className="mr-1.5 h-4 w-4" />
                               Check-Out
                             </Button>
                           </div>
                         )}
                       </TableCell>
                     </TableRow>
-                  );
-                });
+                  ];
+                }
+
+                // Determine if employee is currently checked in (last session has no checkout)
+                const sessions = daily.sessions;
+                const lastSession = sessions[sessions.length - 1];
+                const isCurrentlyCheckedIn = lastSession && lastSession.checkOut === "-";
+                // Can check-in only if NOT currently checked in
+                const canCheckIn = !isCurrentlyCheckedIn;
+                // Can check-out only if currently checked in
+                const canCheckOut = !!isCurrentlyCheckedIn;
+
+                // A real "session" is a completed check-in/out pair, OR the current active check-in.
+                // Orphaned check-ins (no checkout, not the latest) are junk from the old double-
+                // check-in bug — filter them out of the display.
+                const displaySessions = sessions.filter((s, i) =>
+                  s.checkOut !== "-" ? true : i === sessions.length - 1
+                );
+                const hasMultipleSessions = displaySessions.length > 1;
+
+                const rows: JSX.Element[] = [];
+
+                // Main employee summary row
+                rows.push(
+                  <TableRow
+                    key={emp.id}
+                    className={hasMultipleSessions ? "cursor-pointer hover:bg-muted/30" : ""}
+                    onClick={hasMultipleSessions ? () => toggleExpand(emp.id) : undefined}
+                  >
+                    <TableCell className="w-8">
+                      {hasMultipleSessions && (
+                        <span className="text-muted-foreground flex items-center justify-center">
+                          {isExpanded
+                            ? <ChevronDown className="h-4 w-4" />
+                            : <ChevronRight className="h-4 w-4" />}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{emp.name}</div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        {emp.empCode}
+                        {hasMultipleSessions && (
+                          <span className="inline-flex items-center gap-0.5 text-muted-foreground/70">
+                            <Clock className="h-3 w-3" />
+                            {displaySessions.length} sessions
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{emp.department}</TableCell>
+                    <TableCell className="tabular-nums font-medium">
+                      {displayTime(daily.firstIn)}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {isCurrentlyCheckedIn ? (
+                        <span className="text-muted-foreground font-medium">-</span>
+                      ) : (
+                        <span className="font-medium">{displayTime(daily.lastOut)}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          daily.status === "Active" ? "default" :
+                          daily.status === "Completed" ? "secondary" :
+                          daily.status === "Half Day" ? "outline" :
+                          "destructive"
+                        }
+                      >
+                        {daily.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                      {isToday && (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-primary hover:text-primary disabled:opacity-50"
+                            disabled={!canCheckIn || isProcessing}
+                            title={!canCheckIn ? "Employee is currently checked in" : "Manual check-in"}
+                            onClick={() => handleManualCheckIn(emp.id)}
+                          >
+                            {isProcessing
+                              ? <Loader2 className="h-4 w-4 animate-spin" />
+                              : <LogIn className="mr-1.5 h-4 w-4" />}
+                            Check-In
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-accent hover:text-accent disabled:opacity-50"
+                            disabled={!canCheckOut || isProcessing}
+                            title={!canCheckOut ? "Employee is not currently checked in" : "Manual check-out"}
+                            onClick={() => handleManualCheckOut(emp.id)}
+                          >
+                            {isProcessing
+                              ? <Loader2 className="h-4 w-4 animate-spin" />
+                              : <LogOut className="mr-1.5 h-4 w-4" />}
+                            Check-Out
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+
+                // Expanded sub-rows: one per session
+                if (isExpanded && hasMultipleSessions) {
+                  displaySessions.forEach((session, i) => {
+                    rows.push(
+                      <TableRow key={`${emp.id}-s${i}`} className="bg-muted/20 hover:bg-muted/25">
+                        <TableCell className="w-8"></TableCell>
+                        <TableCell colSpan={2}>
+                          <div className="flex items-center gap-2 pl-5 text-sm text-muted-foreground">
+                            <div className="h-1.5 w-1.5 rounded-full bg-primary/50 shrink-0" />
+                            Session {i + 1}
+                          </div>
+                        </TableCell>
+                        <TableCell className="tabular-nums text-sm text-muted-foreground">
+                          {displayTime(session.checkIn)}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-sm text-muted-foreground">
+                          {session.checkOut === "-"
+                            ? "-"
+                            : displayTime(session.checkOut)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={session.checkOut === "-" ? "default" : "secondary"}
+                            className="text-xs"
+                          >
+                            {session.checkOut === "-" ? "Active" : "Done"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                    );
+                  });
+                }
+
+                return rows;
               })
             )}
           </TableBody>
