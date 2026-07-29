@@ -196,16 +196,6 @@ function SettingsPage() {
                 }
               />
             </Field>
-            <Field label="Attendance scan cooldown (minutes)">
-              <Input
-                type="number"
-                min="1"
-                value={form.attendanceCooldownMinutes}
-                onChange={(event) =>
-                  setForm({ ...form, attendanceCooldownMinutes: Number(event.target.value) })
-                }
-              />
-            </Field>
           </div>
         </section>
 
@@ -232,25 +222,8 @@ function SettingsPage() {
         <section className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)] lg:col-span-2">
           <Header icon={Clock} title="Attendance Rules" />
           <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Field label="Full-day hours">
-              <Input
-                type="number"
-                min="1"
-                step="0.5"
-                value={form.fullDayHours}
-                onChange={(event) => setForm({ ...form, fullDayHours: Number(event.target.value) })}
-              />
-            </Field>
-            <Field label="Half-day threshold (hours)">
-              <Input
-                type="number"
-                min="1"
-                step="0.5"
-                value={form.halfDayThreshold}
-                onChange={(event) => setForm({ ...form, halfDayThreshold: Number(event.target.value) })}
-              />
-            </Field>
-            <Field label="Grace period (minutes)">
+
+            <Field label="Grace time (minutes)">
               <Input
                 type="number"
                 min="0"
@@ -269,15 +242,15 @@ function SettingsPage() {
               />
             </Field>
             <Field label="Automated Overtime">
-               <div className="flex items-center gap-2 mt-2">
-                 <input 
-                   type="checkbox" 
-                   checked={form.otAutomated} 
-                   onChange={(e) => setForm({...form, otAutomated: e.target.checked})} 
-                   className="h-4 w-4"
-                 />
-                 <span className="text-sm">Calculate OT automatically</span>
-               </div>
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="checkbox"
+                  checked={form.otAutomated}
+                  onChange={(e) => setForm({ ...form, otAutomated: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm">Calculate OT automatically</span>
+              </div>
             </Field>
             <Field label="Leave Days (space-separated, e.g. Sunday Friday)">
               <Input
@@ -300,15 +273,15 @@ function SettingsPage() {
           <Header icon={Wallet} title="Incentives" />
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <Field label="Enable Automated Incentives">
-               <div className="flex items-center gap-2 mt-2">
-                 <input 
-                   type="checkbox" 
-                   checked={form.automatedIncentivesEnabled} 
-                   onChange={(e) => setForm({...form, automatedIncentivesEnabled: e.target.checked})} 
-                   className="h-4 w-4"
-                 />
-                 <span className="text-sm">Award perfect attendance automatically</span>
-               </div>
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="checkbox"
+                  checked={form.automatedIncentivesEnabled}
+                  onChange={(e) => setForm({ ...form, automatedIncentivesEnabled: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm">Award perfect attendance automatically</span>
+              </div>
             </Field>
             <Field label="Perfect Attendance Reward (₹)">
               <Input
@@ -318,134 +291,148 @@ function SettingsPage() {
                 onChange={(event) => setForm({ ...form, perfectAttendanceReward: Number(event.target.value) })}
               />
             </Field>
-          </div>
-        </section>
-
-        <section className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)] lg:col-span-2">
-          <Header icon={Building2} title="Departments" />
-          <form className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]" onSubmit={addDepartment}>
-            <Field label="Department name">
-              <Input
-                value={departmentName}
-                onChange={(event) => setDepartmentName(event.target.value)}
-                placeholder="Department name"
-              />
-            </Field>
-            <Button type="submit" className="self-end" disabled={saving}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              {editingDepartment ? "Update department" : "Add department"}
-            </Button>
-          </form>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {departments.length ? (
-              departments.map((department) => (
-                <span
-                  key={department.id}
-                  className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm"
-                >
-                  {department.name}
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      setEditingDepartment(department);
-                      setDepartmentName(department.name);
-                    }}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => void removeDepartment(department)}
-                    disabled={saving}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </span>
-              ))
-            ) : (
-              <div className="w-full rounded-lg border bg-background px-3 py-6 text-center text-sm text-muted-foreground">
-                Add departments here before creating employees.
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)] lg:col-span-2">
-          <Header
-            icon={Wallet}
-            title="Designation deduction policy (Amount to deduct from salary during absence)"
-          />
-          <form className="mt-4 grid gap-3 md:grid-cols-[1fr_180px_auto]" onSubmit={saveDeduction}>
-            <Field label="Designation">
-              <Input
-                value={designationForm.name}
-                onChange={(event) =>
-                  setDesignationForm({ ...designationForm, name: event.target.value })
-                }
-                placeholder="Designation name"
-              />
-            </Field>
-            <Field label="Absent-day deduction">
+            <Field label="Attendance Incentive Threshold (days)">
               <Input
                 type="number"
-                value={designationForm.absentDayDeduction}
-                onChange={(event) =>
-                  setDesignationForm({
-                    ...designationForm,
-                    absentDayDeduction: event.target.value,
-                  })
-                }
+                min="1"
+                max="31"
+                value={form.halfDayThreshold ?? 20}
+                onChange={(event) => setForm({ ...form, halfDayThreshold: Number(event.target.value) })}
+                disabled={!form.automatedIncentivesEnabled}
+                placeholder="e.g., 20"
               />
+              <p className="text-xs text-muted-foreground mt-1">Reward employees present ≥ this many days</p>
             </Field>
-            <Button type="submit" className="self-end" disabled={saving}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              {editingDesignation ? "Update designation" : "Add designation"}
+          </div>
+        </section>
+
+
+        <section className="rounded-xl border  bg-card p-5 shadow-[var(--shadow-elevate-sm)]">
+          <Header icon={Building2} title="Departments" />
+          <form onSubmit={addDepartment} className="mt-4 flex gap-2">
+            <Input
+              placeholder="Department name"
+              value={departmentName}
+              onChange={(e) => setDepartmentName(e.target.value)}
+            />
+            <Button type="submit" disabled={saving}>
+              {editingDepartment ? (
+                <Save className="h-4 w-4" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
             </Button>
           </form>
-          <div className="mt-4 divide-y rounded-lg border bg-background">
-            {designations.length ? (
-              designations.map((row) => (
-                <div key={row.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                  <span className="font-medium">{row.name}</span>
-                  <div className="flex items-center gap-3">
-                    <span className="tabular-nums text-muted-foreground">
-                      Rs {row.absentDayDeduction.toLocaleString("en-IN")} / absent day
-                    </span>
+
+          <div className="mt-4 space-y-2">
+            {departments.length ? (
+              departments.map((row) => (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between rounded-lg border bg-background p-3 text-sm shadow-[var(--shadow-elevate-sm)]"
+                >
+                  <div className="font-medium text-foreground">{row.name}</div>
+                  <div className="flex items-center gap-1">
                     <Button
-                      size="icon"
                       variant="ghost"
-                      className="h-7 w-7"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-primary"
                       onClick={() => {
-                        setEditingDesignation(row);
-                        setDesignationForm({
-                          name: row.name,
-                          absentDayDeduction: String(row.absentDayDeduction),
-                        });
+                        setEditingDepartment(row);
+                        setDepartmentName(row.name);
                       }}
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
-                      size="icon"
                       variant="ghost"
-                      className="h-7 w-7 text-destructive"
-                      onClick={() => void removeDesignation(row)}
-                      disabled={saving}
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeDepartment(row)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
               ))
             ) : (
               <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                No deduction rules configured.
+                No departments configured.
               </div>
             )}
           </div>
         </section>
+
+        <section className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)]">
+          <Header icon={Building2} title="Designations" />
+          <form onSubmit={saveDeduction} className="mt-4 flex gap-2">
+            <Input
+              placeholder="Designation name"
+              value={designationForm.name}
+              onChange={(e) => setDesignationForm({ ...designationForm, name: e.target.value })}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="Per-hour deduction (₹)"
+              value={designationForm.absentDayDeduction}
+              onChange={(e) => setDesignationForm({ ...designationForm, absentDayDeduction: e.target.value })}
+              className="w-48"
+            />
+            <Button type="submit" disabled={saving}>
+              {editingDesignation ? (
+                <Save className="h-4 w-4" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+            </Button>
+          </form>
+
+          <div className="mt-4 space-y-2">
+            {designations.length ? (
+              designations.map((row) => (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between rounded-lg border bg-background p-3 text-sm shadow-[var(--shadow-elevate-sm)]"
+                >
+                  <div>
+                    <div className="font-medium text-foreground">{row.name}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {row.absentDayDeduction > 0 ? `Deducts ₹${row.absentDayDeduction}/hr` : "Uses calculated hourly rate"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-primary"
+                      onClick={() => {
+                        setEditingDesignation(row);
+                        setDesignationForm({ name: row.name, absentDayDeduction: row.absentDayDeduction.toString() });
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeDesignation(row)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                No designations configured.
+              </div>
+            )}
+          </div>
+        </section>
+
       </div>
     </div>
   );

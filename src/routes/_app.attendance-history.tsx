@@ -194,8 +194,18 @@ function AttendanceManagementPage() {
                     <TableRow key={emp.id}>
                       <TableCell className="w-8"></TableCell>
                       <TableCell>
-                        <div className="font-medium">{emp.name}</div>
-                        <div className="text-xs text-muted-foreground">{emp.empCode}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold overflow-hidden">
+                            {emp.profileImage
+                              ? <img src={emp.profileImage} alt={emp.name} className="h-7 w-7 rounded-full object-cover" />
+                              : (emp.name.split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase())
+                            }
+                          </span>
+                          <div>
+                            <div className="font-medium">{emp.name}</div>
+                            <div className="text-xs text-muted-foreground">{emp.empCode}</div>
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>{emp.department}</TableCell>
                       <TableCell className="tabular-nums text-muted-foreground">-</TableCell>
@@ -268,15 +278,25 @@ function AttendanceManagementPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{emp.name}</div>
-                      <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        {emp.empCode}
-                        {hasMultipleSessions && (
-                          <span className="inline-flex items-center gap-0.5 text-muted-foreground/70">
-                            <Clock className="h-3 w-3" />
-                            {displaySessions.length} sessions
-                          </span>
-                        )}
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold overflow-hidden">
+                          {emp.profileImage
+                            ? <img src={emp.profileImage} alt={emp.name} className="h-7 w-7 rounded-full object-cover" />
+                            : (emp.name.split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase())
+                          }
+                        </span>
+                        <div>
+                          <div className="font-medium">{emp.name}</div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            {emp.empCode}
+                            {hasMultipleSessions && (
+                              <span className="inline-flex items-center gap-0.5 text-muted-foreground/70">
+                                <Clock className="h-3 w-3" />
+                                {displaySessions.length} sessions
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>{emp.department}</TableCell>

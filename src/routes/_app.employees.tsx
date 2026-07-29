@@ -42,6 +42,7 @@ import {
   initials,
   isDbReady,
   saveEmployeeFaceDescriptor,
+  saveEmployeeProfileImage,
   updateEmployee,
   type Department,
   type Designation,
@@ -96,6 +97,7 @@ function EmployeesPage() {
   const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
   const [camError, setCamError] = useState<string | null>(null);
   const [faceCapturing, setFaceCapturing] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -284,6 +286,14 @@ function EmployeesPage() {
     if (!videoRef.current) return;
     setFaceCapturing(true);
     try {
+      // Capture a still image frame from the video stream
+      const canvas = document.createElement("canvas");
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      canvas.getContext("2d")?.drawImage(videoRef.current, 0, 0);
+      const imageDataUrl = canvas.toDataURL("image/jpeg", 0.7);
+      setCapturedImage(imageDataUrl);
+
       const descriptor = await getDescriptorFromVideo(videoRef.current);
       if (!descriptor) throw new Error("No face detected — improve lighting and get closer");
       setFaceDescriptor(Array.from(descriptor));
@@ -302,10 +312,14 @@ function EmployeesPage() {
     if (!employeeId || !faceDescriptor) return;
     try {
       await saveEmployeeFaceDescriptor(employeeId, faceDescriptor);
+      if (capturedImage) {
+        await saveEmployeeProfileImage(employeeId, capturedImage);
+      }
       setRegisteredIds((prev) => new Set([...prev, employeeId]));
       toast.success("Face registered successfully!");
       setOpen(false);
       resetForm();
+      void loadEmployees(); // Reload to show updated profile image
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save face");
     }
@@ -727,8 +741,11 @@ function EmployeesPage() {
                       params={{ id: employee.id }}
                       className="flex items-center gap-3"
                     >
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-semibold">
-                        {initials(employee.name)}
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold overflow-hidden">
+                        {employee.profileImage
+                          ? <img src={employee.profileImage} alt={employee.name} className="h-8 w-8 rounded-full object-cover" />
+                          : initials(employee.name)
+                        }
                       </span>
                       <div>
                         <div className="text-sm font-medium">{employee.name}</div>

@@ -10,12 +10,15 @@ Built with TanStack Start, React 19, Vite, Tailwind v4, shadcn/ui, Recharts, fac
 - **No employee login flow.** Employees do not use the system and cannot access dashboards, reports, salary, or payroll pages.
 - **Public attendance scanner** at `/attendance`, with no manager navigation or admin UI.
 - **Face-only attendance.** The scanner identifies a registered employee face and records check-in/check-out.
+- **Profile Pictures.** During face registration, a photo is captured and displayed across the dashboard, employee list, attendance, and payroll screens.
 - **Scan cooldown.** After a successful check-in or check-out, the same employee cannot be toggled again until the configured cooldown expires. Default: `1` minute.
 - **Safer face matching.** The scanner rejects no-face frames, multiple-face frames, weak matches, and ambiguous matches.
 - **Face Management.** Managers register or update employee face profiles and view registration status.
 - **Full employee management.** Managers can add, edit, update, and delete employee records.
-- **Master data settings.** Managers can create, edit, and delete departments and designations. Designations include absence deduction amounts.
-- **Calculated payroll.** Pay type, salary/rate, overtime, fixed bonus, attendance hours, and absence deductions are calculated from database records.
+- **Master data settings.** Managers can create, edit, and delete departments and designations.
+- **Hourly Salary Deduction.** Pay type, salary/rate, overtime, fixed bonus, and absence deductions are strictly calculated from exact cumulative check-in/check-out hours. A full day is standardized at 10 hours.
+- **Advanced Attendance & Holidays.** Features automated late check-in tracking (inherits previous session status for the day) and Public Holidays logic (via Announcements tagged `[HOLIDAY]`) that credit full pay for holidays.
+- **Automated & Manual Incentives.** Managers can set an attendance threshold to auto-award perfect attendance, and manually add custom incentives.
 - **PDF reports.** Payroll and company reports use jsPDF + AutoTable with a corporate Hivetree layout.
 - **Local AI insights.** The AI module uses free in-browser trend analysis over Supabase attendance/payroll data. No paid AI API is required.
 

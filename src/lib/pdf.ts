@@ -168,7 +168,7 @@ function table(doc: PdfDoc, options: UserOptions) {
     alternateRowStyles: { fillColor: ROW_ALT },
     didParseCell: (data: CellHookData) => {
       if (data.section === "body" && typeof data.cell.raw === "number") {
-        data.cell.text = [money(data.cell.raw)];
+        data.cell.text = [String(data.cell.raw)];
         data.cell.styles.halign = "right";
       }
     },
@@ -256,13 +256,14 @@ export function downloadSalaryPdf(
     startY: breakdownY + 5,
     head: [["Description", "Units", "Rate", "Amount"]],
     body: [
-      ["Basic salary", number(baseHours), money(baseRate), row.base],
-      ["Overtime earnings", number(row.overtimeHours), money(overtimeRate), row.overtime],
-      ["Fixed bonus", row.overtimeHours > 0 ? "Credited" : "Not credited", "-", row.bonus],
-      ["Absence deduction", row.absentDays, money(deductionRate), -row.deductions],
+      ["Basic salary", number(baseHours), money(baseRate), money(row.base)],
+      ["Overtime earnings", number(row.overtimeHours), money(overtimeRate), money(row.overtime)],
+      ["Fixed bonus", row.overtimeHours > 0 ? "Credited" : "Not credited", "-", money(row.bonus)],
+      ["Incentives", "-", "-", money(row.incentives || 0)],
+      ["Absence deduction", String(row.absentDays), money(deductionRate), `-${money(row.deductions)}`],
     ],
     foot: [
-      ["Gross earnings", "", "", money(taxableTotal)],
+      ["Gross earnings", "", "", money(taxableTotal + (row.incentives || 0))],
       ["Total deductions", "", "", `-${money(row.deductions)}`],
       ["Net payable", "", "", money(row.net)],
     ],
@@ -329,14 +330,15 @@ export function downloadCompanyReportPdf(filename: string, report: CompanyReport
   sectionTitle(doc, "Company Spending Summary", 78);
   table(doc, {
     startY: 83,
-    head: [["Base Payroll", "Overtime", "Bonuses", "Deductions", "Net Payroll"]],
+    head: [["Base Payroll", "Overtime", "Bonuses", "Incentives", "Deductions", "Net Payroll"]],
     body: [
       [
-        report.payrollRows.reduce((sum, row) => sum + row.base, 0),
-        report.totals.overtime,
-        report.totals.bonuses,
-        -report.totals.deductions,
-        report.totals.net,
+        money(report.payrollRows.reduce((sum, row) => sum + row.base, 0)),
+        money(report.totals.overtime),
+        money(report.totals.bonuses),
+        money(report.totals.incentives),
+        `-${money(report.totals.deductions)}`,
+        money(report.totals.net),
       ],
     ],
   });
@@ -354,6 +356,7 @@ export function downloadCompanyReportPdf(filename: string, report: CompanyReport
         "Hours",
         "Overtime",
         "Bonus",
+        "Incentives",
         "Deductions",
         "Net",
       ],
@@ -364,21 +367,23 @@ export function downloadCompanyReportPdf(filename: string, report: CompanyReport
       row.department,
       `${row.workedDays}/${row.expectedDays}`,
       number(row.regularHours),
-      row.overtime,
-      row.bonus,
-      -row.deductions,
-      row.net,
+      money(row.overtime),
+      money(row.bonus),
+      money(row.incentives || 0),
+      `-${money(row.deductions)}`,
+      money(row.net),
     ]),
     columnStyles: {
-      0: { cellWidth: 18 },
+      0: { cellWidth: 15 },
       1: { cellWidth: 30 },
-      2: { cellWidth: 24 },
+      2: { cellWidth: 20 },
       3: { halign: "center", cellWidth: 18 },
-      4: { halign: "right", cellWidth: 16 },
-      5: { halign: "right", cellWidth: 20 },
-      6: { halign: "right", cellWidth: 18 },
-      7: { halign: "right", cellWidth: 22 },
-      8: { halign: "right", cellWidth: 18, fontStyle: "bold" },
+      4: { halign: "right", cellWidth: 14 },
+      5: { halign: "right", cellWidth: 18 },
+      6: { halign: "right", cellWidth: 16 },
+      7: { halign: "right", cellWidth: 16 },
+      8: { halign: "right", cellWidth: 18 },
+      9: { halign: "right", cellWidth: 18, fontStyle: "bold" },
     },
   });
 

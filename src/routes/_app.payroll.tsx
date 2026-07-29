@@ -254,9 +254,17 @@ function PayrollPage() {
                   onClick={() => setSelectedId(row.employeeId)}
                 >
                   <TableCell>
-                    <button type="button" className="text-left">
-                      <div className="text-sm font-medium text-primary">{row.name}</div>
-                      <div className="text-xs text-muted-foreground">{row.empCode}</div>
+                    <button type="button" className="flex items-center gap-2 text-left">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold overflow-hidden">
+                        {row.profileImage
+                          ? <img src={row.profileImage} alt={row.name} className="h-8 w-8 rounded-full object-cover" />
+                          : row.name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()
+                        }
+                      </span>
+                      <div>
+                        <div className="text-sm font-medium text-primary">{row.name}</div>
+                        <div className="text-xs text-muted-foreground">{row.empCode}</div>
+                      </div>
                     </button>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">

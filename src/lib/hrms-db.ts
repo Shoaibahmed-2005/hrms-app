@@ -48,6 +48,7 @@ export type DbEmployee = {
   status: "Active" | "On Leave" | "Inactive" | string;
   joinDate: string;
   userId: string | null;
+  profileImage: string | null;
 };
 
 export type Department = {
@@ -102,6 +103,7 @@ type EmployeeRow = {
   status: string;
   join_date: string;
   user_id: string | null;
+  profile_image?: string | null;
 };
 
 type DepartmentRow = {
@@ -230,6 +232,7 @@ export type SalaryReportRow = {
   net: number;
   status: string;
   incentives?: number;
+  profileImage?: string | null;
 };
 
 export type CompanyReportData = {
@@ -245,6 +248,7 @@ export type CompanyReportData = {
     hours: number;
     overtime: number;
     bonuses: number;
+    incentives: number;
     deductions: number;
     net: number;
   };
@@ -305,6 +309,7 @@ export function mapEmployee(row: EmployeeRow): DbEmployee {
     status: row.status,
     joinDate: row.join_date,
     userId: row.user_id,
+    profileImage: row.profile_image ?? null,
   };
 }
 
@@ -467,6 +472,7 @@ function employeeSelect(extra = "") {
     "status",
     "join_date",
     "user_id",
+    "profile_image",
     extra,
   ]
     .filter(Boolean)
@@ -526,14 +532,12 @@ function calculatePayrollRows(
   startDate: string,
   endDate: string,
   deductions: DesignationDeduction[] = [],
+  holidays: Set<string> = new Set(),
+  manualIncentives: IncentiveRow[] = [],
 ): SalaryReportRow[] {
   const workDates = eachDate(startDate, endDate).filter(isWorkday);
   const expectedDays = workDates.length;
-  const standardHours = shiftHours(settings);
-  // Lunch break deduction per worked day (default 1 hour if not set)
-  const lunchBreakHours = Number((settings as any).lunchBreakMinutes ?? 60) / 60;
-  // Payable hours per day = shift hours minus lunch break
-  const payableHoursPerDay = Math.max(0, standardHours - lunchBreakHours);
+  const payableHoursPerDay = 10; // Hardcoded full day = 10 hours
   const expectedHours = expectedDays * payableHoursPerDay;
 
   const attendanceByEmployee = new Map<string, AttendanceRow[]>();
@@ -565,18 +569,30 @@ function calculatePayrollRows(
         hoursByDate.set(row.date, prev + h);
       });
 
-      // Determine worked days (at least halfDayThreshold hours after lunch deduction)
-      const halfDay = settings.halfDayThreshold ?? 4;
+      // Determine worked days (at least 5 hours)
+      const halfDay = 5; // Hardcoded half day = 5 hours
       let workedDays = 0;
       let totalPayableHours = 0;
 
       hoursByDate.forEach((rawHours, _date) => {
-        // Deduct lunch break from raw daily hours
-        const payable = Math.max(0, rawHours - lunchBreakHours);
-        // Cap payable hours at the shift's payable hours per day
+        // Actual salary is always calculated from check-in/check-out times (cumulative sessions)
+        const payable = rawHours;
+        // Cap payable hours at the shift's payable hours per day (10)
         const dailyPayable = Math.min(payable, payableHoursPerDay);
         if (payable >= halfDay) workedDays++;
         totalPayableHours += dailyPayable;
+      });
+
+      // Apply holiday credits
+      holidays.forEach(hDate => {
+        if (hDate >= startDate && hDate <= endDate && isWorkday(hDate)) {
+          const logged = hoursByDate.get(hDate) || 0;
+          if (logged < halfDay) {
+             workedDays++;
+             // Credit remaining hours up to full day
+             totalPayableHours += Math.max(0, payableHoursPerDay - logged);
+          }
+        }
       });
 
       totalPayableHours = Math.round(totalPayableHours * 100) / 100;
@@ -595,24 +611,38 @@ function calculatePayrollRows(
             ? employee.monthlySalary / expectedHours
             : 0;
 
-      let base = 0;
-      if (employee.payType === "hourly") {
-        base = regularHours * employee.hourlyRate;
-      } else {
-        // Monthly: prorate by worked days vs expected days
-        base =
-          expectedDays > 0
-            ? (employee.monthlySalary / expectedDays) * workedDays
-            : employee.monthlySalary;
+      // Expected base pay for the entire period
+      const expectedBase =
+        employee.payType === "hourly" ? expectedHours * hourlyRate : employee.monthlySalary;
+
+      // Calculate missing hours and apply exact hourly deduction
+      const missingHours = Math.max(0, expectedHours - regularHours);
+      
+      const designationRule = deductions.find(d => d.designation === employee.role);
+      const customDeductionRate = designationRule ? designationRule.absentDayDeduction : 0;
+      const deductionRate = customDeductionRate > 0 ? customDeductionRate : hourlyRate;
+      
+      const hourlyDeduction = missingHours * deductionRate;
+
+      // Automatic incentives
+      let automatedIncentive = 0;
+      const rewardAmount = settings.perfectAttendanceReward ?? 0;
+      if (settings.automatedIncentivesEnabled && rewardAmount > 0) {
+        const threshold = settings.halfDayThreshold || 999; // Reusing this field for the threshold
+        if (workedDays >= threshold) {
+          automatedIncentive = rewardAmount;
+        }
       }
+      // Manual incentives
+      const employeeManualIncentives = manualIncentives
+        .filter(i => i.employee_id === employee.id)
+        .reduce((sum, i) => sum + Number(i.amount || 0), 0);
+
+      const totalIncentives = automatedIncentive + employeeManualIncentives;
+      const finalBonus = bonus; // separation: bonus is for overtime, totalIncentives is for incentives
 
       const overtime = overtimeHours * hourlyRate * settings.overtimeMultiplier;
-      const fallbackDailyDeduction =
-        employee.payType === "monthly" && expectedDays ? employee.monthlySalary / expectedDays : 0;
-      const absentDayDeduction =
-        deductionByDesignation.get(employee.role.trim().toLowerCase()) ?? fallbackDailyDeduction;
-      const absenceDeduction = absentDays * absentDayDeduction;
-      const net = Math.max(0, base + overtime + bonus - absenceDeduction);
+      const net = Math.max(0, expectedBase - hourlyDeduction + overtime + finalBonus + totalIncentives);
 
       return {
         employeeId: employee.id,
@@ -629,12 +659,14 @@ function calculatePayrollRows(
         absentDays,
         regularHours,
         overtimeHours,
-        base: Math.round(base),
+        base: Math.round(expectedBase),
         overtime: Math.round(overtime),
-        bonus: Math.round(bonus),
-        deductions: Math.round(absenceDeduction),
+        bonus: Math.round(finalBonus),
+        incentives: Math.round(totalIncentives),
+        deductions: Math.round(hourlyDeduction),
         net: Math.round(net),
         status: rows.some((row) => !row.check_out) ? "Open" : "Calculated",
+        profileImage: employee.profileImage ?? null,
       };
     });
 }
@@ -937,6 +969,8 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     };
   });
 
+  const holidays = await fetchHolidays(monthStart, today);
+
   const payrollRows = calculatePayrollRows(
     activeEmployees,
     attendance,
@@ -944,6 +978,7 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     monthStart,
     today,
     deductionRules,
+    holidays
   );
 
   const recentActivities = [
@@ -1177,6 +1212,19 @@ export async function saveEmployeeFaceDescriptor(employeeId: string, descriptor:
     { onConflict: "employee_id" },
   );
   if (error) throw error;
+}
+
+export async function saveEmployeeProfileImage(employeeId: string, base64Image: string) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { error } = await supabase
+    .from("employees")
+    .update({ profile_image: base64Image })
+    .eq("id", employeeId);
+  if (error) {
+    // Silently ignore if column doesn't exist yet (column not yet added to DB)
+    if (!error.message.includes("profile_image")) throw error;
+    console.warn("profile_image column not yet created in DB. Add it via Supabase dashboard.");
+  }
 }
 
 export async function fetchFaceRegistry() {
@@ -1421,7 +1469,7 @@ export async function recordFaceAttendance(payload: {
   // Get the most recent session for today
   const { data: existingArray, error: existingError } = await supabase
     .from("attendance")
-    .select("id, check_in, check_out")
+    .select("id, check_in, check_out, status")
     .eq("employee_id", payload.employeeId)
     .eq("date", today)
     .order("check_in", { ascending: false })
@@ -1457,7 +1505,7 @@ export async function recordFaceAttendance(payload: {
       }
     }
 
-    const status = attendanceStatusFor(now, settings);
+    const status = existing?.status || attendanceStatusFor(now, settings);
     const { error } = await supabase.from("attendance").insert({
       employee_id: payload.employeeId,
       user_id: employee?.user_id ?? null,
@@ -1543,7 +1591,7 @@ export async function fetchManagerAttendanceData(date: string): Promise<ManagerA
 export async function fetchSalaryReportRows(startDate = currentMonthStart(), endDate = dateKey()) {
   if (!supabase) return [] as SalaryReportRow[];
 
-  const [settings, deductionRules, employeesRes, attendanceRes] = await Promise.all([
+  const [settings, deductionRules, employeesRes, attendanceRes, holidays, incentives] = await Promise.all([
     fetchCompanySettings(),
     fetchDesignationDeductions(),
     supabase.from("employees").select(employeeSelect()).order("full_name", { ascending: true }),
@@ -1552,6 +1600,8 @@ export async function fetchSalaryReportRows(startDate = currentMonthStart(), end
       .select(attendanceSelect())
       .gte("date", startDate)
       .lte("date", endDate),
+    fetchHolidays(startDate, endDate),
+    fetchIncentives(startDate, endDate)
   ]);
 
   const error = employeesRes.error ?? attendanceRes.error;
@@ -1559,7 +1609,7 @@ export async function fetchSalaryReportRows(startDate = currentMonthStart(), end
 
   const employees = ((employeesRes.data ?? []) as unknown as EmployeeRow[]).map(mapEmployee);
   const attendance = (attendanceRes.data ?? []) as unknown as AttendanceRow[];
-  return calculatePayrollRows(employees, attendance, settings, startDate, endDate, deductionRules);
+  return calculatePayrollRows(employees, attendance, settings, startDate, endDate, deductionRules, holidays, incentives);
 }
 
 function aggregateDailyAttendance(entries: AttendanceEntry[], settings: CompanySettings): DailyAttendance[] {
@@ -1667,6 +1717,7 @@ export async function fetchCompanyReport(
         hours: 0,
         overtime: 0,
         bonuses: 0,
+        incentives: 0,
         deductions: 0,
         net: 0,
       },
@@ -1701,6 +1752,7 @@ export async function fetchCompanyReport(
       hours: Math.round(attendanceRows.reduce((sum, row) => sum + row.totalHours, 0) * 100) / 100,
       overtime: payrollRows.reduce((sum, row) => sum + row.overtime, 0),
       bonuses: payrollRows.reduce((sum, row) => sum + row.bonus, 0),
+      incentives: payrollRows.reduce((sum, row) => sum + (row.incentives || 0), 0),
       deductions: payrollRows.reduce((sum, row) => sum + row.deductions, 0),
       net: payrollRows.reduce((sum, row) => sum + row.net, 0),
     },
@@ -1773,6 +1825,9 @@ export async function fetchAIInsights(): Promise<AIInsightsData> {
   const absentCounts = workdayTrend.map((row) => row.absent);
   const overtimeHours = workdayTrend.map((row) => row.overtime);
   const lateCounts = workdayTrend.map((row) => row.late);
+  const holidays = await fetchHolidays(startDate, endDate);
+  const incentives = await fetchIncentives(startDate, endDate);
+  
   const payrollRows = calculatePayrollRows(
     activeEmployees,
     attendance,
@@ -1780,6 +1835,8 @@ export async function fetchAIInsights(): Promise<AIInsightsData> {
     startDate,
     endDate,
     deductionRules,
+    holidays,
+    incentives
   );
 
   const predictedAttendanceRate = Math.max(
@@ -1877,7 +1934,7 @@ export async function recordManualCheckIn(employeeId: string, managerId: string)
   // and we must not let them block legitimate second check-ins after a checkout.
   const { data: latestSession, error: latestErr } = await supabase
     .from("attendance")
-    .select("id, check_out")
+    .select("id, check_out, status")
     .eq("employee_id", employeeId)
     .eq("date", dateKey())
     .order("check_in", { ascending: false })
@@ -1895,7 +1952,7 @@ export async function recordManualCheckIn(employeeId: string, managerId: string)
   ]);
 
   const now = new Date().toISOString();
-  const status = attendanceStatusFor(now, settings);
+  const status = latestSession?.status || attendanceStatusFor(now, settings);
 
   const { error } = await supabase.from("attendance").insert({
     employee_id: employeeId,
@@ -1982,6 +2039,23 @@ export async function fetchAnnouncements() {
     createdAt: row.created_at,
     createdBy: row.created_by
   }));
+}
+
+export async function fetchHolidays(startDate: string, endDate: string) {
+  const announcements = await fetchAnnouncements();
+  const holidays = new Set<string>();
+  
+  announcements.forEach((a) => {
+    if (a.active && a.title.toUpperCase().includes("[HOLIDAY]")) {
+      const match = a.body.match(/\b\d{4}-\d{2}-\d{2}\b/);
+      if (match) {
+        holidays.add(match[0]);
+      } else {
+        holidays.add(a.createdAt.slice(0, 10));
+      }
+    }
+  });
+  return holidays;
 }
 
 export async function saveAnnouncement(payload: { id?: string; title: string; body: string; active: boolean; createdBy: string }) {

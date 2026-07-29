@@ -148,8 +148,18 @@ function ReportsPage() {
               payrollRows.map((row) => (
                 <TableRow key={row.employeeId}>
                   <TableCell>
-                    <div className="text-sm font-medium">{row.name}</div>
-                    <div className="text-xs text-muted-foreground">{row.empCode}</div>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold overflow-hidden">
+                        {row.profileImage
+                          ? <img src={row.profileImage} alt={row.name} className="h-8 w-8 rounded-full object-cover" />
+                          : row.name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()
+                        }
+                      </span>
+                      <div>
+                        <div className="text-sm font-medium">{row.name}</div>
+                        <div className="text-xs text-muted-foreground">{row.empCode}</div>
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div>{row.department}</div>

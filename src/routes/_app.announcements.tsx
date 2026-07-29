@@ -33,7 +33,13 @@ function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", body: "", active: true });
+  const [form, setForm] = useState({
+    title: "",
+    body: "",
+    active: true,
+    isHoliday: false,
+    holidayDate: "",
+  });
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
@@ -60,14 +66,14 @@ function AnnouncementsPage() {
     setProcessing(true);
     try {
       await saveAnnouncement({
-        title: form.title,
-        body: form.body,
+        title: form.isHoliday ? `[HOLIDAY] ${form.title.replace(/\[HOLIDAY\]/gi, "").trim()}` : form.title,
+        body: form.isHoliday ? form.holidayDate : form.body,
         active: form.active,
         createdBy: user?.id || "",
       });
       toast.success("Announcement created");
       setOpen(false);
-      setForm({ title: "", body: "", active: true });
+      setForm({ title: "", body: "", active: true, isHoliday: false, holidayDate: "" });
       load();
     } catch (error) {
       toast.error("Failed to save announcement");
@@ -129,15 +135,36 @@ function AnnouncementsPage() {
                     placeholder="E.g. Holiday Notice"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Body</Label>
-                  <Textarea
-                    value={form.body}
-                    onChange={(e) => setForm({ ...form, body: e.target.value })}
-                    placeholder="Details about the announcement..."
-                    rows={4}
+
+                <div className="flex items-center justify-between">
+                  <Label>Is this a Holiday?</Label>
+                  <Switch
+                    checked={form.isHoliday}
+                    onCheckedChange={(c) => setForm({ ...form, isHoliday: c })}
                   />
                 </div>
+
+                {form.isHoliday ? (
+                  <div className="space-y-1.5">
+                    <Label>Holiday Date</Label>
+                    <Input
+                      type="date"
+                      value={form.holidayDate}
+                      onChange={(e) => setForm({ ...form, holidayDate: e.target.value })}
+                      required={form.isHoliday}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label>Body</Label>
+                    <Textarea
+                      value={form.body}
+                      onChange={(e) => setForm({ ...form, body: e.target.value })}
+                      placeholder="Details about the announcement..."
+                      rows={4}
+                    />
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <Label>Active (Show on Kiosk)</Label>
                   <Switch
@@ -175,10 +202,13 @@ function AnnouncementsPage() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-accent/20 text-accent">
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-md ${a.title.includes("[HOLIDAY]") ? "bg-primary/20 text-primary" : "bg-accent/20 text-accent"}`}>
                     <Megaphone className="h-4 w-4" />
                   </div>
-                  <div className="font-semibold">{a.title}</div>
+                  <div className="font-semibold">{a.title.replace(/\[HOLIDAY\]/gi, "").trim()}</div>
+                  {a.title.includes("[HOLIDAY]") && (
+                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary">Holiday</span>
+                  )}
                 </div>
                 <Button
                   variant="ghost"
@@ -190,7 +220,7 @@ function AnnouncementsPage() {
                 </Button>
               </div>
               <p className="mt-3 text-sm text-muted-foreground line-clamp-3">
-                {a.body || "No additional details"}
+                {a.title.includes("[HOLIDAY]") ? `Date: ${a.body}` : (a.body || "No additional details")}
               </p>
               <div className="mt-4 flex items-center justify-between border-t pt-4 text-xs text-muted-foreground">
                 <div>By {a.createdBy} on {new Date(a.createdAt).toLocaleDateString()}</div>
