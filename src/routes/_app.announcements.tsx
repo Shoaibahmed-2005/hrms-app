@@ -196,7 +196,7 @@ function AnnouncementsPage() {
           announcements.map((a) => (
             <div
               key={a.id}
-              className={`relative rounded-xl border bg-card p-5 shadow-sm transition-opacity ${
+              className={`relative rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-5 shadow-sm transition-opacity ${
                 !a.active ? "opacity-60" : ""
               }`}
             >

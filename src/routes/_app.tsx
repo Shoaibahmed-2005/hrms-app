@@ -43,7 +43,6 @@ function AppShell() {
           </div>
         </main>
       </div>
-      <Toaster position="top-right" />
     </div>
   );
 }

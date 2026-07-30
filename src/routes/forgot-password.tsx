@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 
 export const Route = createFileRoute("/forgot-password")({
-  head: () => ({ meta: [{ title: "Reset password — Hivetree HRMS" }] }),
+  head: () => ({ meta: [{ title: "Reset password — Cleans HRMS HRMS" }] }),
   component: ForgotPage,
 });
 

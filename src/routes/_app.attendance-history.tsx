@@ -143,7 +143,7 @@ function AttendanceManagementPage() {
         />
       </div>
 
-      <div className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-4 shadow-sm">
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Date</label>
           <Input
@@ -162,7 +162,7 @@ function AttendanceManagementPage() {
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">

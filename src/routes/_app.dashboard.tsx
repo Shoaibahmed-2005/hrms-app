@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Sparkles, TrendingUp, UserCheck, Users, UserX, Wallet } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowRight, BarChart2, TrendingUp, UserCheck, Users, UserX, Wallet, Building2 } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Area,
   AreaChart,
@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { downloadCSV } from "@/lib/csv";
-import { fetchDashboardData, type DashboardData } from "@/lib/hrms-db";
+import { fetchDashboardData, fetchOutlets, type DashboardData } from "@/lib/hrms-db";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_app/dashboard")({
-  head: () => ({ meta: [{ title: "Manager Dashboard - Hivetree" }] }),
+  head: () => ({ meta: [{ title: "Manager Dashboard - Cleans HRMS" }] }),
   component: ManagerDashboard,
 });
 
@@ -36,13 +36,15 @@ const EMPTY_DASHBOARD: DashboardData = {
 
 function ManagerDashboard() {
   const [data, setData] = useState<DashboardData>(EMPTY_DASHBOARD);
+  const [outlets, setOutlets] = useState<{id: string, name: string}[]>([]);
+  const [outletId, setOutletId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     let alive = true;
     setLoading(true);
-    fetchDashboardData()
+    fetchDashboardData(outletId || undefined)
       .then((next) => {
         if (!alive) return;
         setData(next);
@@ -58,7 +60,15 @@ function ManagerDashboard() {
     return () => {
       alive = false;
     };
+  }, [outletId]);
+
+  useEffect(() => {
+    fetchOutlets().then(setOutlets).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    return load();
+  }, [load]);
 
   const availability = data.totalEmployees
     ? Math.round((data.presentToday / data.totalEmployees) * 100)
@@ -70,16 +80,28 @@ function ManagerDashboard() {
         title="Manager Dashboard"
         description="A live pulse on your workforce today."
         actions={
-          <Button
-            size="sm"
-            onClick={() => {
-              downloadCSV("manager-report.csv", data.attendanceTrend);
-              toast.success("Report downloaded");
-            }}
-            disabled={data.attendanceTrend.length === 0}
-          >
-            Download report
-          </Button>
+          <div className="flex items-center gap-3">
+            <select
+              className="flex h-9 w-48 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              value={outletId}
+              onChange={(e) => setOutletId(e.target.value)}
+            >
+              <option value="">All Outlets</option>
+              {outlets.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              onClick={() => {
+                downloadCSV("manager-report.csv", data.attendanceTrend);
+                toast.success("Report downloaded");
+              }}
+              disabled={data.attendanceTrend.length === 0}
+            >
+              Download report
+            </Button>
+          </div>
         }
       />
 
@@ -110,8 +132,8 @@ function ManagerDashboard() {
         />
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)]">
+      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold">Attendance trend</div>
@@ -173,7 +195,7 @@ function ManagerDashboard() {
                     dataKey="absent"
                     stroke="var(--color-destructive)"
                     fill="transparent"
-                    strokeWidth={1.5}
+                    strokeWidth={2}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -185,13 +207,13 @@ function ManagerDashboard() {
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)]">
+        <div className="rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
           <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <Sparkles className="h-3.5 w-3.5" />
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <BarChart2 className="h-3.5 w-3.5" />
             </div>
             <div>
-              <div className="text-sm font-semibold">AI Workforce Prediction</div>
+              <div className="text-sm font-semibold">Workforce Analytics</div>
               <div className="text-xs text-muted-foreground">Based on live attendance inputs</div>
             </div>
           </div>
@@ -211,14 +233,14 @@ function ManagerDashboard() {
             />
           </div>
           <Button variant="ghost" size="sm" className="mt-4 w-full justify-between" asChild>
-            <Link to="/ai-prediction">
-              View full report <ArrowRight className="h-3.5 w-3.5" />
+            <Link to="/analytics">
+              View full analytics <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </Button>
         </div>
       </div>
 
-      <div className="mt-6 rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)]">
+      <div className="mt-6 rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div className="mb-3 text-sm font-semibold">Recent activity</div>
         {data.recentActivities.length ? (
           <ul className="space-y-3">

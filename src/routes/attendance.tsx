@@ -50,6 +50,8 @@ function AttendanceScannerPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef(false);
   const cooldownRef = useRef<number | null>(null);
+  const hasBlinked = useRef(false);
+  const locationRef = useRef<{ lat: number; long: number } | null>(null);
   // Track per-employee last action to enforce check-in/out order
   const employeeLastAction = useRef(new Map<string, "in" | "out">());
   const [registry, setRegistry] = useState<FaceRegistryEntry[]>([]);
@@ -60,6 +62,16 @@ function AttendanceScannerPage() {
   const [confidence, setConfidence] = useState<number | null>(null);
 
   useEffect(() => {
+    // Request location in the background
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          locationRef.current = { lat: pos.coords.latitude, long: pos.coords.longitude };
+        },
+        (err) => console.warn("Geolocation error:", err),
+        { enableHighAccuracy: true }
+      );
+    }
     void boot();
     return () => {
       stopCamera();
@@ -142,11 +154,17 @@ function AttendanceScannerPage() {
 
       try {
         setState("scanning");
-        const descriptor = await getDescriptorFromVideo(videoRef.current);
-        if (!descriptor) {
+        const scanResult = await getDescriptorFromVideo(videoRef.current);
+        if (!scanResult) {
           setMessage("Searching for face...");
           cooldownRef.current = window.setTimeout(tick, 1200);
           return;
+        }
+
+        const { descriptor, ear } = scanResult;
+
+        if (ear < 0.25) {
+          hasBlinked.current = true;
         }
 
         const ranked = registeredFaces
@@ -184,11 +202,29 @@ function AttendanceScannerPage() {
 
         const empId = best.entry.employeeId;
 
+        if (!hasBlinked.current) {
+          setMatched(best.entry);
+          setConfidence(score);
+          setState("scanning");
+          setMessage("Please blink to verify...");
+          cooldownRef.current = window.setTimeout(tick, 300);
+          return;
+        }
+
+        const deviceSecret = localStorage.getItem("kiosk_device_secret") || "";
+        const lat = locationRef.current?.lat || 0;
+        const long = locationRef.current?.long || 0;
+
         const result = await recordFaceAttendance({
           employeeId: empId,
           faceConfidence: score,
           action: action,
+          deviceSecret,
+          lat,
+          long
         });
+
+        hasBlinked.current = false;
 
         // Track this action for order enforcement (session-level fast path)
         if (result.action === "check-in") employeeLastAction.current.set(empId, "in");
@@ -196,20 +232,26 @@ function AttendanceScannerPage() {
 
         setMatched(best.entry);
         setConfidence(score);
-        setState(result.action === "cooldown" ? "error" : "success");
-        setMessage(
-          result.action === "check-in"
-            ? `Checked In ✓ — ${result.status}`
-            : result.action === "check-out"
-              ? `Checked Out ✓ — ${(result as any).hours?.toFixed(2)}h worked`
-              : result.action === "cooldown"
-                ? `Please wait ${result.waitSeconds}s before scanning again.`
-                : `Already complete — ${(result as any).hours?.toFixed(2)}h`
-        );
-        if (result.action === "cooldown") {
-          toast.info(`${best.entry.name}: cooldown active`);
+        setState(result.action === "cooldown" || result.status === "error" ? "error" : "success");
+        
+        if (result.status === "error") {
+          setMessage(result.message || "Error recording attendance");
+          toast.error(result.message || "Error");
         } else {
-          toast.success(`${best.entry.name}: ${messageForAction(result.action as any)}`);
+          setMessage(
+            result.action === "check-in"
+              ? `Checked In ✓`
+              : result.action === "check-out"
+                ? `Checked Out ✓`
+                : result.action === "cooldown"
+                  ? `Please wait before scanning again.`
+                  : `Already complete`
+          );
+          if (result.action === "cooldown") {
+            toast.info(`${best.entry.name}: cooldown active`);
+          } else {
+            toast.success(`${best.entry.name}: ${messageForAction(result.action as any)}`);
+          }
         }
 
         cooldownRef.current = window.setTimeout(() => {
@@ -251,7 +293,7 @@ function AttendanceScannerPage() {
       <div className="flex flex-1 min-h-0 flex-col landscape:flex-row md:flex-row gap-3 p-3 w-full max-w-6xl mx-auto">
 
         {/* ── Camera panel ── */}
-        <div className="flex-1 min-h-0 min-w-0 overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elevate-sm)] flex flex-col">
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col">
           <div
             className={`relative flex-1 overflow-hidden rounded-lg border-2 m-2 bg-black ${
               isSuccess ? "border-emerald-500" : isError ? "border-destructive" : "border-border"
@@ -318,7 +360,7 @@ function AttendanceScannerPage() {
         <div className="shrink-0 landscape:w-[260px] md:w-[260px] flex flex-col gap-2">
 
           {/* Status card */}
-          <div className="rounded-xl border bg-card px-4 py-3 shadow-[var(--shadow-elevate-sm)] flex items-center gap-3 landscape:flex-col landscape:items-center landscape:text-center landscape:py-4 md:flex-col md:items-center md:text-center md:py-4">
+          <div className="rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card px-4 py-3 shadow-xl shadow-slate-200/50 dark:shadow-none flex items-center gap-3 landscape:flex-col landscape:items-center landscape:text-center landscape:py-4 md:flex-col md:items-center md:text-center md:py-4">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent">
               {isSuccess ? (
                 <CheckCircle2 className="h-5 w-5 text-emerald-500" />
@@ -365,6 +407,7 @@ function AttendanceScannerPage() {
             onClick={() => {
               if (cooldownRef.current) window.clearTimeout(cooldownRef.current);
               scanningRef.current = false;
+              hasBlinked.current = false;
               setMatched(null);
               setConfidence(null);
               void boot();

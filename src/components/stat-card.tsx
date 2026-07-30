@@ -19,7 +19,7 @@ export function StatCard({ label, value, delta, trend = "flat", icon: Icon, clas
         : "text-muted-foreground";
   return (
     <div
-      className={cn("rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)]", className)}
+      className={cn("rounded-2xl border border-border bg-card p-6 shadow-xl shadow-slate-200/50 dark:shadow-none", className)}
     >
       <div className="flex items-start justify-between">
         <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

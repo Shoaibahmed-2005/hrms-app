@@ -19,7 +19,7 @@ import { fetchCompanyReport, type CompanyReportData } from "@/lib/hrms-db";
 import { downloadCompanyReportPdf } from "@/lib/pdf";
 
 export const Route = createFileRoute("/_app/reports")({
-  head: () => ({ meta: [{ title: "Reports - Hivetree" }] }),
+  head: () => ({ meta: [{ title: "Reports - Cleans HRMS" }] }),
   component: ReportsPage,
 });
 
@@ -83,7 +83,7 @@ function ReportsPage() {
         }
       />
 
-      <div className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-elevate-sm)]">
+      <div className="mb-6 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <Field label="From">
           <Input
             type="date"
@@ -123,7 +123,7 @@ function ReportsPage() {
         />
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elevate-sm)]">
+      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div className="border-b px-4 py-3 text-sm font-semibold">Company spending by employee</div>
         <Table>
           <TableHeader>
@@ -188,7 +188,7 @@ function ReportsPage() {
         </Table>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elevate-sm)]">
+      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div className="border-b px-4 py-3 text-sm font-semibold">Attendance detail</div>
         <Table>
           <TableHeader>

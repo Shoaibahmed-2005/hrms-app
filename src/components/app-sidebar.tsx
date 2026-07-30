@@ -5,10 +5,11 @@ import {
   CalendarDays,
   Wallet,
   BarChart3,
-  Sparkles,
+  BarChart2,
   Settings,
   Megaphone,
   Menu,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -45,8 +46,9 @@ const NAV: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { to: "/ai-prediction", label: "AI Prediction", icon: Sparkles, roles: ["manager"] },
+      { to: "/analytics", label: "Analytics", icon: BarChart2, roles: ["manager"] },
       { to: "/announcements", label: "Announcements", icon: Megaphone, roles: ["manager"] },
+      { to: "/outlets", label: "Outlets", icon: Building2, roles: ["manager"] },
       { to: "/payroll", label: "Payroll", icon: Wallet },
       { to: "/reports", label: "Reports", icon: BarChart3, roles: ["manager"] },
       { to: "/settings", label: "Settings", icon: Settings, roles: ["manager"] },
@@ -89,11 +91,9 @@ function SidebarContent({ mobile = false }: { mobile?: boolean }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center gap-2 border-b px-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
-          C
-        </div>
-        <div className="text-sm font-semibold tracking-tight">CLEANUP</div>
+      <div className="flex h-14 items-center gap-2 border-b border-[#141E2E] px-4">
+        <img src="/cleans-logo.png" alt="Cleans" className="h-8 w-auto object-contain" />
+        <div className="text-lg font-bold tracking-tight text-white">Cleans</div>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-4">
         {NAV.map((group) => {

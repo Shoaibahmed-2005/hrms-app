@@ -15,11 +15,12 @@ import { Route as AttendanceRouteImport } from './routes/attendance'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as KioskRouteImport } from './routes/kiosk'
 import { Route as SignupRouteImport } from './routes/signup'
-import { Route as AppAiPredictionRouteImport } from './routes/_app.ai-prediction'
+import { Route as AppAnalyticsRouteImport } from './routes/_app.analytics'
 import { Route as AppAnnouncementsRouteImport } from './routes/_app.announcements'
 import { Route as AppAttendanceHistoryRouteImport } from './routes/_app.attendance-history'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppEmployeesRouteImport } from './routes/_app.employees'
+import { Route as AppOutletsRouteImport } from './routes/_app.outlets'
 import { Route as AppPayrollRouteImport } from './routes/_app.payroll'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
@@ -54,9 +55,9 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppAiPredictionRoute = AppAiPredictionRouteImport.update({
-  id: '/ai-prediction',
-  path: '/ai-prediction',
+const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAnnouncementsRoute = AppAnnouncementsRouteImport.update({
@@ -77,6 +78,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
 const AppEmployeesRoute = AppEmployeesRouteImport.update({
   id: '/employees',
   path: '/employees',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOutletsRoute = AppOutletsRouteImport.update({
+  id: '/outlets',
+  path: '/outlets',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPayrollRoute = AppPayrollRouteImport.update({
@@ -106,11 +112,12 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/kiosk': typeof KioskRoute
   '/signup': typeof SignupRoute
-  '/ai-prediction': typeof AppAiPredictionRoute
+  '/analytics': typeof AppAnalyticsRoute
   '/announcements': typeof AppAnnouncementsRoute
   '/attendance-history': typeof AppAttendanceHistoryRoute
   '/dashboard': typeof AppDashboardRoute
   '/employees': typeof AppEmployeesRouteWithChildren
+  '/outlets': typeof AppOutletsRoute
   '/payroll': typeof AppPayrollRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -122,11 +129,12 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/kiosk': typeof KioskRoute
   '/signup': typeof SignupRoute
-  '/ai-prediction': typeof AppAiPredictionRoute
+  '/analytics': typeof AppAnalyticsRoute
   '/announcements': typeof AppAnnouncementsRoute
   '/attendance-history': typeof AppAttendanceHistoryRoute
   '/dashboard': typeof AppDashboardRoute
   '/employees': typeof AppEmployeesRouteWithChildren
+  '/outlets': typeof AppOutletsRoute
   '/payroll': typeof AppPayrollRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -140,11 +148,12 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/kiosk': typeof KioskRoute
   '/signup': typeof SignupRoute
-  '/_app/ai-prediction': typeof AppAiPredictionRoute
+  '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/announcements': typeof AppAnnouncementsRoute
   '/_app/attendance-history': typeof AppAttendanceHistoryRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/employees': typeof AppEmployeesRouteWithChildren
+  '/_app/outlets': typeof AppOutletsRoute
   '/_app/payroll': typeof AppPayrollRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -158,11 +167,12 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/kiosk'
     | '/signup'
-    | '/ai-prediction'
+    | '/analytics'
     | '/announcements'
     | '/attendance-history'
     | '/dashboard'
     | '/employees'
+    | '/outlets'
     | '/payroll'
     | '/reports'
     | '/settings'
@@ -174,11 +184,12 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/kiosk'
     | '/signup'
-    | '/ai-prediction'
+    | '/analytics'
     | '/announcements'
     | '/attendance-history'
     | '/dashboard'
     | '/employees'
+    | '/outlets'
     | '/payroll'
     | '/reports'
     | '/settings'
@@ -191,11 +202,12 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/kiosk'
     | '/signup'
-    | '/_app/ai-prediction'
+    | '/_app/analytics'
     | '/_app/announcements'
     | '/_app/attendance-history'
     | '/_app/dashboard'
     | '/_app/employees'
+    | '/_app/outlets'
     | '/_app/payroll'
     | '/_app/reports'
     | '/_app/settings'
@@ -255,11 +267,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/ai-prediction': {
-      id: '/_app/ai-prediction'
-      path: '/ai-prediction'
-      fullPath: '/ai-prediction'
-      preLoaderRoute: typeof AppAiPredictionRouteImport
+    '/_app/analytics': {
+      id: '/_app/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AppAnalyticsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/announcements': {
@@ -288,6 +300,13 @@ declare module '@tanstack/react-router' {
       path: '/employees'
       fullPath: '/employees'
       preLoaderRoute: typeof AppEmployeesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/outlets': {
+      id: '/_app/outlets'
+      path: '/outlets'
+      fullPath: '/outlets'
+      preLoaderRoute: typeof AppOutletsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/payroll': {
@@ -334,22 +353,24 @@ const AppEmployeesRouteWithChildren = AppEmployeesRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
-  AppAiPredictionRoute: typeof AppAiPredictionRoute
+  AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppAnnouncementsRoute: typeof AppAnnouncementsRoute
   AppAttendanceHistoryRoute: typeof AppAttendanceHistoryRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppEmployeesRoute: typeof AppEmployeesRouteWithChildren
+  AppOutletsRoute: typeof AppOutletsRoute
   AppPayrollRoute: typeof AppPayrollRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAiPredictionRoute: AppAiPredictionRoute,
+  AppAnalyticsRoute: AppAnalyticsRoute,
   AppAnnouncementsRoute: AppAnnouncementsRoute,
   AppAttendanceHistoryRoute: AppAttendanceHistoryRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppEmployeesRoute: AppEmployeesRouteWithChildren,
+  AppOutletsRoute: AppOutletsRoute,
   AppPayrollRoute: AppPayrollRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,

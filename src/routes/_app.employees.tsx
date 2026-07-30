@@ -68,7 +68,7 @@ import { downloadCSV } from "@/lib/csv";
 import { getDescriptorFromVideo, loadFaceModels } from "@/lib/face";
 
 export const Route = createFileRoute("/_app/employees")({
-  head: () => ({ meta: [{ title: "Employees - Hivetree" }] }),
+  head: () => ({ meta: [{ title: "Employees - Cleans HRMS" }] }),
   component: EmployeesPage,
 });
 
@@ -162,6 +162,11 @@ function EmployeesPage() {
   );
   const departmentNames = departments.map((department) => department.name);
   const designationNames = designations.map((designation) => designation.name);
+  
+  // Filter designations based on selected department in the form
+  const filteredDesignations = designations.filter(d => 
+    !form.department || !d.department || d.department === form.department
+  ).map(d => d.name);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -180,7 +185,7 @@ function EmployeesPage() {
         salary: Number(form.salary) || 0,
         fixedBonus: Number(form.fixedBonus) || 0,
         phone: form.phone,
-        manager: form.manager,
+        manager: "System Manager",
       };
       const saved = editing
         ? await updateEmployee(editing.id, { ...payload, status: form.status })
@@ -436,28 +441,33 @@ function EmployeesPage() {
                           placeholder="optional"
                         />
                       </Field>
-                      <Field label="Designation">
+                      <Field label="Designation / Role">
                         <select
                           className="h-9 w-full rounded-md border bg-background px-3 text-sm"
                           value={form.role}
                           onChange={(event) => setForm({ ...form, role: event.target.value })}
-                          disabled={designations.length === 0}
                         >
-                          {designations.length === 0 ? (
-                            <option value="">Add designations in Settings</option>
-                          ) : null}
-                          {designationNames.map((designation) => (
+                          {designations.length === 0 && (
+                            <option value="">Loading roles...</option>
+                          )}
+                          {filteredDesignations.map((designation) => (
                             <option key={designation} value={designation}>
                               {designation}
                             </option>
                           ))}
                         </select>
+                        <p className="mt-1 text-[11px] text-muted-foreground">Select the employee's job role in the outlet.</p>
                       </Field>
                       <Field label="Department">
                         <select
                           className="h-9 w-full rounded-md border bg-background px-3 text-sm"
                           value={form.department}
-                          onChange={(event) => setForm({ ...form, department: event.target.value })}
+                          onChange={(event) => {
+                            const newDept = event.target.value;
+                            // Find the first designation for this new department
+                            const firstRoleForDept = designations.find(d => !d.department || d.department === newDept)?.name || "";
+                            setForm({ ...form, department: newDept, role: firstRoleForDept });
+                          }}
                           disabled={departments.length === 0}
                         >
                           {departments.length === 0 ? (
@@ -506,12 +516,7 @@ function EmployeesPage() {
                           placeholder="+92 3..."
                         />
                       </Field>
-                      <Field label="Reporting manager">
-                        <Input
-                          value={form.manager}
-                          onChange={(event) => setForm({ ...form, manager: event.target.value })}
-                        />
-                      </Field>
+
                       {editing ? (
                         <Field label="Status">
                           <select
@@ -711,7 +716,7 @@ function EmployeesPage() {
         </Select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elevate-sm)]">
+      <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card shadow-xl shadow-slate-200/50 dark:shadow-none">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">

@@ -11,7 +11,7 @@ import {
 } from "@/lib/hrms-db";
 
 export const Route = createFileRoute("/_app/employees/$id")({
-  head: ({ params }) => ({ meta: [{ title: `Employee ${params.id} - Hivetree` }] }),
+  head: ({ params }) => ({ meta: [{ title: `Employee ${params.id} - Cleans HRMS` }] }),
   loader: async ({ params }) => {
     const employee = await fetchEmployeeById(params.id);
     if (!employee) throw notFound();
@@ -53,7 +53,7 @@ function EmployeeProfile() {
       <div className="grid gap-4 lg:grid-cols-3">
         <EmployeeCard employee={employee} />
 
-        <div className="lg:col-span-2 rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)]">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-5 shadow-xl shadow-slate-200/50 dark:shadow-none">
           <div className="mb-4 text-sm font-semibold">Recent attendance</div>
           <div className="divide-y">
             {attendance.length ? (
@@ -81,7 +81,7 @@ function EmployeeProfile() {
 
 function EmployeeCard({ employee }: { employee: DbEmployee }) {
   return (
-    <div className="rounded-xl border bg-card p-5 shadow-[var(--shadow-elevate-sm)]">
+    <div className="rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-5 shadow-xl shadow-slate-200/50 dark:shadow-none">
       <div className="flex items-center gap-3">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-base font-semibold">
           {initials(employee.name)}

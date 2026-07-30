@@ -10,21 +10,23 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { downloadCSV } from "@/lib/csv";
-import { fetchSalaryReportRows, saveIncentive, type SalaryReportRow } from "@/lib/hrms-db";
+import { fetchSalaryReportRows, saveIncentive, fetchOutlets, type SalaryReportRow } from "@/lib/hrms-db";
 import { downloadSalaryPdf } from "@/lib/pdf";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/_app/payroll")({
-  head: () => ({ meta: [{ title: "Payroll - Hivetree" }] }),
+  head: () => ({ meta: [{ title: "Payroll - Cleans HRMS" }] }),
   component: PayrollPage,
 });
 
 function PayrollPage() {
   const { user } = useAuth();
   const [rows, setRows] = useState<SalaryReportRow[]>([]);
+  const [outlets, setOutlets] = useState<{id: string, name: string}[]>([]);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(monthStart());
   const [endDate, setEndDate] = useState(today());
+  const [outletId, setOutletId] = useState<string>("");
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   
@@ -34,14 +36,18 @@ function PayrollPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetchSalaryReportRows(startDate, endDate)
+    fetchSalaryReportRows(startDate, endDate, outletId || undefined)
       .then(setRows)
       .catch((error) => {
         console.error(error);
         toast.error(error instanceof Error ? error.message : "Could not load payroll");
       })
       .finally(() => setLoading(false));
-  }, [endDate, startDate]);
+  }, [endDate, startDate, outletId]);
+
+  useEffect(() => {
+    fetchOutlets().then(setOutlets).catch(console.error);
+  }, []);
 
   useEffect(() => {
     load();
@@ -159,7 +165,7 @@ function PayrollPage() {
         }
       />
 
-      <div className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-elevate-sm)]">
+      <div className="mb-6 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <Field label="From">
           <Input
             type="date"
@@ -169,6 +175,18 @@ function PayrollPage() {
         </Field>
         <Field label="To">
           <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+        </Field>
+        <Field label="Outlet">
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            value={outletId}
+            onChange={(e) => setOutletId(e.target.value)}
+          >
+            <option value="">All Outlets</option>
+            {outlets.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
         </Field>
         <Button onClick={load}>
           <CalendarDays className="mr-1.5 h-4 w-4" />
@@ -218,7 +236,7 @@ function PayrollPage() {
         />
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elevate-sm)]">
+      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card shadow-xl shadow-slate-200/50 dark:shadow-none">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -232,7 +250,8 @@ function PayrollPage() {
               <TableHead className="text-right">Bonus</TableHead>
               <TableHead className="text-right">Incentives</TableHead>
               <TableHead className="text-right">Deductions</TableHead>
-              <TableHead className="text-right">Net</TableHead>
+              <TableHead className="text-right">Net {outletId ? "(Outlet)" : ""}</TableHead>
+              {outletId && <TableHead className="text-right">Total Earning</TableHead>}
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -300,8 +319,13 @@ function PayrollPage() {
                   <TableCell className="text-right font-semibold tabular-nums">
                     Rs {row.net.toLocaleString("en-IN")}
                   </TableCell>
+                  {outletId && (
+                    <TableCell className="text-right font-bold tabular-nums text-primary">
+                      Rs {(row.globalNet || 0).toLocaleString("en-IN")}
+                    </TableCell>
+                  )}
                   <TableCell>
-                    <Badge variant={row.status === "Finalized" ? "secondary" : "outline"}>
+                    <Badge variant={row.status === "Calculated" ? "secondary" : "default"}>
                       {row.status}
                     </Badge>
                   </TableCell>

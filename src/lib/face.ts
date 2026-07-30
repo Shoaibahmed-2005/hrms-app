@@ -8,7 +8,7 @@ let modelsLoaded = false;
 async function ensureBackend() {
   if (backendReady) return;
   try {
-    await faceapi.tf.setBackend("cpu");
+    await faceapi.tf.setBackend("webgl");
     await faceapi.tf.ready();
   } catch {
     // Ignore — some builds throw even on success
@@ -48,7 +48,7 @@ export function loadFaceModels(): Promise<void> {
 
 export async function getDescriptorFromVideo(
   video: HTMLVideoElement
-): Promise<number[] | null> {
+): Promise<{ descriptor: number[], ear: number } | null> {
   if (!modelsLoaded) {
     await loadFaceModels();
   }
@@ -72,7 +72,21 @@ export async function getDescriptorFromVideo(
   if (detections.length === 0) return null;
   if (detections.length > 1)
     throw new Error("Multiple faces detected. Scan one employee at a time.");
-  return Array.from(detections[0].descriptor);
+  
+  const landmarks = detections[0].landmarks;
+  const leftEye = landmarks.getLeftEye();
+  const rightEye = landmarks.getRightEye();
+  
+  const calculateEAR = (eye: faceapi.Point[]) => {
+    const v1 = euclidean([eye[1].x, eye[1].y], [eye[5].x, eye[5].y]);
+    const v2 = euclidean([eye[2].x, eye[2].y], [eye[4].x, eye[4].y]);
+    const h = euclidean([eye[0].x, eye[0].y], [eye[3].x, eye[3].y]);
+    return (v1 + v2) / (2.0 * h);
+  };
+
+  const ear = (calculateEAR(leftEye) + calculateEAR(rightEye)) / 2.0;
+
+  return { descriptor: Array.from(detections[0].descriptor), ear };
 }
 
 function detectFaces(video: HTMLVideoElement) {

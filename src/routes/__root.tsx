@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth-context";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -78,22 +79,25 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "CLEANUP — Laundry & Dry Cleaning Management" },
+      { title: "Cleans HRMS — Outlet Management System" },
       {
         name: "description",
-        content: "A modern management system for CLEANUP laundry & dry cleaning showrooms.",
+        content: "A modern management system for Cleans laundry & dry cleaning outlets.",
       },
-      { property: "og:title", content: "CLEANUP" },
+      { property: "og:title", content: "Cleans HRMS" },
       {
         property: "og:description",
-        content: "A modern management system for CLEANUP laundry & dry cleaning showrooms.",
+        content: "A modern management system for Cleans laundry & dry cleaning outlets.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:wght@500;600;700&display=swap" },
     ],
   }),
   shellComponent: RootShell,
@@ -123,6 +127,7 @@ function RootComponent() {
       <AuthProvider>
         <Outlet />
       </AuthProvider>
+      <Toaster position="top-right" />
     </QueryClientProvider>
   );
 }
