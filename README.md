@@ -24,8 +24,10 @@ This guide is for developers setting up the project from scratch.
 ### 1. Database Setup (Supabase)
 1. Create a new project on [Supabase](https://supabase.com).
 2. Go to the **SQL Editor** in the left sidebar.
-3. Open `db/setup_master.sql` from this repository, copy its entire contents, and run it in the SQL Editor. 
+3. Open `db/setup_master.sql` from this repository, copy its entire contents, and run it in the SQL Editor.
    *(This safely creates all tables, policies, and dummy data needed).*
+4. **Required Patch** — Open `db/04_make_outlet_nullable.sql`, copy its contents, and run it in the SQL Editor as well.
+   *(This patch makes the `outlet_id` column optional so that manager-initiated manual check-ins work correctly.)*
 
 ### 2. Connect Your App
 Create a `.env` file in the root folder with your Supabase credentials:
@@ -55,7 +57,18 @@ The app will start at `http://localhost:8080`.
 3. Click **Deploy**.
 4. **Crucial Final Step**: Copy your live Vercel URL, go to your Supabase Dashboard -> **Authentication -> URL Configuration**, and add your Vercel link as the **Site URL**.
 
+### 6. Register the Kiosk Tablet
+The face-scan attendance kiosk (`/kiosk`) must be linked to an outlet before employees can check in using it.
+1. Open the **Outlets** page in the Manager Dashboard and note the **Device Secret** of the outlet you want to link the tablet to.
+2. Open the Kiosk page on the tablet (`/kiosk`).
+3. **Tap the Cleans logo in the top-left corner 5 times quickly**.
+4. A prompt will appear — enter the outlet's Device Secret UUID and press OK.
+5. The tablet is now registered. Employees can scan their faces to check in and out.
+
+> **Note**: If employees check in via the manager's manual Check-In button (on the Attendance page), no tablet registration is needed. That is intended as a backup for when face scanning fails.
+
 ---
+
 
 ## 🛠️ Tech Stack
 
