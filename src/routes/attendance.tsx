@@ -24,9 +24,11 @@ import {
 import {
   fetchCompanySettings,
   fetchFaceRegistry,
+  fetchAnnouncements,
   recordFaceAttendance,
   type CompanySettings,
   type FaceRegistryEntry,
+  type Announcement,
 } from "@/lib/hrms-db";
 import { z } from "zod";
 
@@ -59,7 +61,9 @@ function AttendanceScannerPage() {
   const [state, setState] = useState<ScanState>("booting");
   const [message, setMessage] = useState("Loading face scanner...");
   const [matched, setMatched] = useState<FaceRegistryEntry | null>(null);
+  const [matched, setMatched] = useState<FaceRegistryEntry | null>(null);
   const [confidence, setConfidence] = useState<number | null>(null);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   useEffect(() => {
     // Request location in the background
@@ -98,13 +102,18 @@ function AttendanceScannerPage() {
       }
 
       setMessage("Loading face models...");
-      const [registeredFaces, companySettings] = await Promise.all([
+      const [registeredFaces, companySettings, announcementsList] = await Promise.all([
         fetchFaceRegistry(),
         fetchCompanySettings(),
+        fetchAnnouncements(),
         loadFaceModels(),
       ]);
       setRegistry(registeredFaces);
       setSettings(companySettings);
+      
+      const now = new Date();
+      setAnnouncements(announcementsList.filter(a => a.active && new Date(a.expires_at) > now));
+
       if (registeredFaces.length === 0) {
         setState("error");
         setMessage("No registered employee faces found.");
@@ -429,6 +438,19 @@ function AttendanceScannerPage() {
           )}
         </div>
       </div>
+
+      {announcements.length > 0 && (
+        <div className="absolute bottom-0 left-0 right-0 h-10 bg-primary/90 text-primary-foreground flex items-center overflow-hidden whitespace-nowrap">
+          <div className="inline-block animate-[ticker_20s_linear_infinite]">
+            {announcements.map((a, i) => (
+              <span key={a.id} className="mx-8 font-medium">
+                {a.is_holiday ? "🌴 HOLIDAY: " : "📢 "}
+                {a.title} - {a.message}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Toaster position="top-center" />
     </main>
