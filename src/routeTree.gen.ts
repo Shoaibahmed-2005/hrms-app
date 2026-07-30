@@ -24,7 +24,7 @@ import { Route as AppOutletsRouteImport } from './routes/_app.outlets'
 import { Route as AppPayrollRouteImport } from './routes/_app.payroll'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
-import { Route as AppEmployeesIdRouteImport } from './routes/_app.employees.$id'
+import { Route as AppEmployeesIdRouteImport } from './routes/_app.employees_.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -101,9 +101,9 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   getParentRoute: () => AppRoute,
 } as any)
 const AppEmployeesIdRoute = AppEmployeesIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AppEmployeesRoute,
+  id: '/employees_/$id',
+  path: '/employees/$id',
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -116,7 +116,7 @@ export interface FileRoutesByFullPath {
   '/announcements': typeof AppAnnouncementsRoute
   '/attendance-history': typeof AppAttendanceHistoryRoute
   '/dashboard': typeof AppDashboardRoute
-  '/employees': typeof AppEmployeesRouteWithChildren
+  '/employees': typeof AppEmployeesRoute
   '/outlets': typeof AppOutletsRoute
   '/payroll': typeof AppPayrollRoute
   '/reports': typeof AppReportsRoute
@@ -133,7 +133,7 @@ export interface FileRoutesByTo {
   '/announcements': typeof AppAnnouncementsRoute
   '/attendance-history': typeof AppAttendanceHistoryRoute
   '/dashboard': typeof AppDashboardRoute
-  '/employees': typeof AppEmployeesRouteWithChildren
+  '/employees': typeof AppEmployeesRoute
   '/outlets': typeof AppOutletsRoute
   '/payroll': typeof AppPayrollRoute
   '/reports': typeof AppReportsRoute
@@ -152,12 +152,12 @@ export interface FileRoutesById {
   '/_app/announcements': typeof AppAnnouncementsRoute
   '/_app/attendance-history': typeof AppAttendanceHistoryRoute
   '/_app/dashboard': typeof AppDashboardRoute
-  '/_app/employees': typeof AppEmployeesRouteWithChildren
+  '/_app/employees': typeof AppEmployeesRoute
   '/_app/outlets': typeof AppOutletsRoute
   '/_app/payroll': typeof AppPayrollRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
-  '/_app/employees/$id': typeof AppEmployeesIdRoute
+  '/_app/employees_/$id': typeof AppEmployeesIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -211,7 +211,7 @@ export interface FileRouteTypes {
     | '/_app/payroll'
     | '/_app/reports'
     | '/_app/settings'
-    | '/_app/employees/$id'
+    | '/_app/employees_/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -330,38 +330,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/employees/$id': {
-      id: '/_app/employees/$id'
-      path: '/$id'
+    '/_app/employees_/$id': {
+      id: '/_app/employees_/$id'
+      path: '/employees/$id'
       fullPath: '/employees/$id'
       preLoaderRoute: typeof AppEmployeesIdRouteImport
-      parentRoute: typeof AppEmployeesRoute
+      parentRoute: typeof AppRoute
     }
   }
 }
-
-interface AppEmployeesRouteChildren {
-  AppEmployeesIdRoute: typeof AppEmployeesIdRoute
-}
-
-const AppEmployeesRouteChildren: AppEmployeesRouteChildren = {
-  AppEmployeesIdRoute: AppEmployeesIdRoute,
-}
-
-const AppEmployeesRouteWithChildren = AppEmployeesRoute._addFileChildren(
-  AppEmployeesRouteChildren,
-)
 
 interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppAnnouncementsRoute: typeof AppAnnouncementsRoute
   AppAttendanceHistoryRoute: typeof AppAttendanceHistoryRoute
   AppDashboardRoute: typeof AppDashboardRoute
-  AppEmployeesRoute: typeof AppEmployeesRouteWithChildren
+  AppEmployeesRoute: typeof AppEmployeesRoute
   AppOutletsRoute: typeof AppOutletsRoute
   AppPayrollRoute: typeof AppPayrollRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppEmployeesIdRoute: typeof AppEmployeesIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -369,11 +358,12 @@ const AppRouteChildren: AppRouteChildren = {
   AppAnnouncementsRoute: AppAnnouncementsRoute,
   AppAttendanceHistoryRoute: AppAttendanceHistoryRoute,
   AppDashboardRoute: AppDashboardRoute,
-  AppEmployeesRoute: AppEmployeesRouteWithChildren,
+  AppEmployeesRoute: AppEmployeesRoute,
   AppOutletsRoute: AppOutletsRoute,
   AppPayrollRoute: AppPayrollRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppEmployeesIdRoute: AppEmployeesIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

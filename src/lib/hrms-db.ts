@@ -1944,9 +1944,10 @@ export async function recordManualCheckIn(employeeId: string, managerId: string)
     throw new Error("Employee is already checked in. Please check out first.");
   }
 
-  const [{ data: employee }, settings] = await Promise.all([
+  const [{ data: employee }, settings, { data: outlet }] = await Promise.all([
     supabase.from("employees").select("user_id").eq("id", employeeId).single(),
-    fetchCompanySettings()
+    fetchCompanySettings(),
+    supabase.from("outlets").select("id").eq("active", true).limit(1).maybeSingle()
   ]);
 
   const now = new Date().toISOString();
@@ -1955,6 +1956,7 @@ export async function recordManualCheckIn(employeeId: string, managerId: string)
   const { error } = await supabase.from("attendance_sessions").insert({
     employee_id: employeeId,
     user_id: employee?.user_id ?? null,
+    outlet_id: outlet?.id,
     date: dateKey(),
     check_in: now,
     status,
