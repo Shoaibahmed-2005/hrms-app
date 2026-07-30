@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Input } from "@/components/ui/input";
@@ -75,6 +75,7 @@ export const Route = createFileRoute("/_app/employees")({
 type CamState = "idle" | "loading" | "streaming" | "captured";
 
 function EmployeesPage() {
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState<DbEmployee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [designations, setDesignations] = useState<Designation[]>([]);
@@ -773,7 +774,11 @@ function EmployeesPage() {
               </TableRow>
             ) : (
               filtered.map((employee) => (
-                <TableRow key={employee.id}>
+                <TableRow 
+                  key={employee.id} 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => navigate({ to: "/employees/$id", params: { id: employee.id } })}
+                >
                   <TableCell>
                     <Link
                       to="/employees/$id"

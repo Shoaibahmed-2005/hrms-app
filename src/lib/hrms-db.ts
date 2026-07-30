@@ -483,6 +483,7 @@ function employeeSelect(extra = "") {
     "status",
     "join_date",
     "user_id",
+    "profile_image",
     extra,
   ]
     .filter(Boolean)
