@@ -20,11 +20,13 @@ import {
   fetchDashboardData,
   fetchEmployees,
   fetchManagerAttendanceData,
+  fetchOutlets,
   recordManualCheckIn,
   recordManualCheckOut,
   type DashboardData,
   type DbEmployee,
-  type DailyAttendance
+  type DailyAttendance,
+  type Outlet,
 } from "@/lib/hrms-db";
 import { useAuth } from "@/lib/auth-context";
 
@@ -49,6 +51,8 @@ function AttendanceManagementPage() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [employees, setEmployees] = useState<DbEmployee[]>([]);
   const [attendanceRows, setAttendanceRows] = useState<DailyAttendance[]>([]);
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [selectedOutlet, setSelectedOutlet] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -57,14 +61,16 @@ function AttendanceManagementPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dash, emp, att] = await Promise.all([
+      const [dash, emp, att, outs] = await Promise.all([
         fetchDashboardData(),
         fetchEmployees(),
-        fetchManagerAttendanceData(date)
+        fetchManagerAttendanceData(date),
+        fetchOutlets(),
       ]);
       setDashboard(dash);
       setEmployees(emp.filter(e => e.status === "Active"));
       setAttendanceRows(att.rows);
+      setOutlets(outs);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not load data");
     } finally {
@@ -80,8 +86,8 @@ function AttendanceManagementPage() {
     if (!user) return;
     setProcessingId(employeeId);
     try {
-      await recordManualCheckIn(employeeId, user.id);
-      toast.success("Checked in manually");
+      await recordManualCheckIn(employeeId, user.id, selectedOutlet || undefined);
+      toast.success("Checked in manually" + (selectedOutlet && outlets.find(o => o.id === selectedOutlet) ? ` at ${outlets.find(o => o.id === selectedOutlet)!.name}` : ""));
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error checking in");
@@ -152,6 +158,21 @@ function AttendanceManagementPage() {
             onChange={(e) => setDate(e.target.value)}
           />
         </div>
+        {outlets.length > 0 && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Outlet (for manual check-in)</label>
+            <select
+              value={selectedOutlet}
+              onChange={(e) => setSelectedOutlet(e.target.value)}
+              className="flex h-9 w-48 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">All / Auto-detect</option>
+              {outlets.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="relative min-w-[240px] flex-1">
           <Input
             value={q}
@@ -367,6 +388,11 @@ function AttendanceManagementPage() {
                           <div className="flex items-center gap-2 pl-5 text-sm text-muted-foreground">
                             <div className="h-1.5 w-1.5 rounded-full bg-primary/50 shrink-0" />
                             Session {i + 1}
+                            {session.outletName && (
+                              <span className="ml-1 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                {session.outletName}
+                              </span>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="tabular-nums text-sm text-muted-foreground">

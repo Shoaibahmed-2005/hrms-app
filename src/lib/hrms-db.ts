@@ -178,6 +178,8 @@ export type AttendanceEntry = {
   hours: number;
   status: string;
   confidence: number;
+  outletId?: string | null;
+  outletName?: string | null;
 };
 
 export type FaceResetRequest = {
@@ -398,9 +400,11 @@ function mapAttendance(
   row: AttendanceRow,
   employeeByUser?: Map<string | null, DbEmployee>,
   employeeById?: Map<string | null, DbEmployee>,
+  outletNameById?: Map<string, string>,
 ): AttendanceEntry {
   const employee =
     employeeById?.get(row.employee_id ?? null) ?? employeeByUser?.get(row.user_id ?? null);
+  const outletId = row.outlet_id ?? null;
   return {
     id: row.id,
     userId: row.user_id ?? null,
@@ -416,6 +420,8 @@ function mapAttendance(
     hours: attendanceHours(row),
     status: row.status,
     confidence: Number(row.face_confidence ?? 0),
+    outletId,
+    outletName: outletId && outletNameById ? (outletNameById.get(outletId) ?? null) : null,
   };
 }
 
@@ -662,6 +668,7 @@ function calculatePayrollRows(
         startDate,
         endDate,
         expectedDays,
+        profileImage: employee.profileImage ?? null,
         
         workedDays: localMetrics.workedDays,
         absentDays: localMetrics.absentDays,
@@ -1516,7 +1523,7 @@ export async function fetchManagerAttendanceData(date: string): Promise<ManagerA
   const settings = await fetchCompanySettings();
   if (!supabase) return { configured: false, rows: [], resetRequests: [], settings };
 
-  const [employeesRes, attendanceRes, resetsRes] = await Promise.all([
+  const [employeesRes, attendanceRes, resetsRes, outletsRes] = await Promise.all([
     supabase.from("employees").select(employeeSelect()),
     supabase
       .from("attendance_sessions")
@@ -1524,6 +1531,7 @@ export async function fetchManagerAttendanceData(date: string): Promise<ManagerA
       .eq("date", date)
       .order("check_in", { ascending: false }),
     fetchFaceResetRequests(),
+    supabase.from("outlets").select("id, name"),
   ]);
 
   const error = employeesRes.error ?? attendanceRes.error;
@@ -1535,9 +1543,12 @@ export async function fetchManagerAttendanceData(date: string): Promise<ManagerA
   const employeeById = new Map(
     ((employeesRes.data ?? []) as unknown as EmployeeRow[]).map((row) => [row.id, mapEmployee(row)]),
   );
+  const outletNameById = new Map<string, string>(
+    ((outletsRes.data ?? []) as { id: string; name: string }[]).map((o) => [o.id, o.name]),
+  );
 
   const rawEntries = ((attendanceRes.data ?? []) as unknown as AttendanceRow[]).map((row) =>
-    mapAttendance(row, employeeByUser, employeeById),
+    mapAttendance(row, employeeByUser, employeeById, outletNameById),
   );
 
   return {
@@ -1924,7 +1935,7 @@ export async function fetchAIInsights(): Promise<AIInsightsData> {
 }
 
 
-export async function recordManualCheckIn(employeeId: string, managerId: string) {
+export async function recordManualCheckIn(employeeId: string, managerId: string, outletId?: string) {
   if (!supabase) throw new Error("Supabase is not configured");
 
   // Check only the LATEST session — not any row with check_out=null.
@@ -1944,10 +1955,10 @@ export async function recordManualCheckIn(employeeId: string, managerId: string)
     throw new Error("Employee is already checked in. Please check out first.");
   }
 
-  const [{ data: employee }, settings, { data: outlet }] = await Promise.all([
+  const [{ data: employee }, settings, { data: firstOutlet }] = await Promise.all([
     supabase.from("employees").select("user_id").eq("id", employeeId).single(),
     fetchCompanySettings(),
-    supabase.from("outlets").select("id").eq("active", true).limit(1).maybeSingle()
+    outletId ? Promise.resolve({ data: { id: outletId } }) : supabase.from("outlets").select("id").eq("active", true).limit(1).maybeSingle()
   ]);
 
   const now = new Date().toISOString();
@@ -1956,7 +1967,7 @@ export async function recordManualCheckIn(employeeId: string, managerId: string)
   const { error } = await supabase.from("attendance_sessions").insert({
     employee_id: employeeId,
     user_id: employee?.user_id ?? null,
-    outlet_id: outlet?.id,
+    outlet_id: outletId ?? firstOutlet?.id ?? null,
     date: dateKey(),
     check_in: now,
     status,
