@@ -83,6 +83,7 @@ function EmployeesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [faceDetected, setFaceDetected] = useState(false);
   const [dept, setDept] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [open, setOpen] = useState(false);
@@ -142,6 +143,22 @@ function EmployeesPage() {
     void loadEmployees();
     return () => stopCamera();
   }, []);
+
+  // Poll face detection in preview
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (camState === "streaming" && videoRef.current) {
+      interval = setInterval(async () => {
+        if (videoRef.current) {
+          const descriptor = await getDescriptorFromVideo(videoRef.current);
+          setFaceDetected(!!descriptor);
+        }
+      }, 800);
+    } else {
+      setFaceDetected(false);
+    }
+    return () => clearInterval(interval);
+  }, [camState]);
 
   const filtered = useMemo(
     () =>
@@ -572,13 +589,30 @@ function EmployeesPage() {
                         )}
 
                         {/* Camera view */}
-                        <div className="relative mx-auto flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border bg-muted">
+                        <div className={`relative mx-auto flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border-4 bg-muted transition-all duration-300 ${
+                          camState === "streaming" 
+                            ? faceDetected 
+                              ? "border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]" 
+                              : "border-slate-300"
+                            : "border-border"
+                        }`}>
                           <video
                             ref={videoRef}
                             className="h-full w-full scale-x-[-1] object-cover"
                             muted
                             playsInline
                           />
+
+                          {camState === "streaming" && (
+                            <div className={`absolute top-3 right-3 px-2 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1 ${
+                              faceDetected 
+                                ? "bg-emerald-500 text-white animate-pulse" 
+                                : "bg-slate-700/80 text-slate-100"
+                            }`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${faceDetected ? "bg-white" : "bg-slate-400"}`} />
+                              {faceDetected ? "FACE DETECTED" : "ALIGN FACE IN FRAME"}
+                            </div>
+                          )}
 
                           {camState === "captured" && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 text-sm">
@@ -624,7 +658,7 @@ function EmployeesPage() {
                               <Button
                                 className="flex-1"
                                 onClick={captureFace}
-                                disabled={faceCapturing}
+                                disabled={faceCapturing || !faceDetected}
                               >
                                 {faceCapturing ? (
                                   <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

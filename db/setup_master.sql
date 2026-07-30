@@ -87,6 +87,7 @@ CREATE TABLE public.employees (
   status text NOT NULL DEFAULT 'Active',
   join_date date NOT NULL DEFAULT current_date,
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  profile_image text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 

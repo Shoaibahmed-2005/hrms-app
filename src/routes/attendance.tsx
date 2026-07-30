@@ -61,7 +61,6 @@ function AttendanceScannerPage() {
   const [state, setState] = useState<ScanState>("booting");
   const [message, setMessage] = useState("Loading face scanner...");
   const [matched, setMatched] = useState<FaceRegistryEntry | null>(null);
-  const [matched, setMatched] = useState<FaceRegistryEntry | null>(null);
   const [confidence, setConfidence] = useState<number | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
