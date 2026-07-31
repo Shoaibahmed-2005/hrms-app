@@ -129,20 +129,29 @@ function OutletsPage() {
     );
   }
 
-  async function handleSearchLocation() {
-    if (!locationSearch.trim()) return;
-    setIsSearching(true);
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationSearch)}&limit=5`);
-      const data = await res.json();
-      setSearchResults(data);
-      if (data.length === 0) toast.error("No results found");
-    } catch (e) {
-      toast.error("Error searching location");
-    } finally {
-      setIsSearching(false);
+  useEffect(() => {
+    const query = locationSearch.trim();
+    if (!query) {
+      setSearchResults([]);
+      return;
     }
-  }
+    
+    setIsSearching(true);
+    const timeoutId = setTimeout(async () => {
+      try {
+        // Restrict to India and prefer South India (Tamil Nadu approx viewbox)
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&viewbox=76.15,13.8,80.35,8.08&limit=5`);
+        const data = await res.json();
+        setSearchResults(data);
+      } catch (e) {
+        // Silently ignore errors during live typing
+      } finally {
+        setIsSearching(false);
+      }
+    }, 600); // 600ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [locationSearch]);
 
   function selectSearchResult(result: any) {
     setForm({
@@ -199,13 +208,10 @@ function OutletsPage() {
                 <Input
                   value={locationSearch}
                   onChange={(e) => setLocationSearch(e.target.value)}
-                  placeholder="e.g. T Nagar, Chennai"
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleSearchLocation())}
+                  placeholder="Start typing area (e.g. T Nagar Chennai)..."
                 />
-                <Button type="button" variant="secondary" onClick={handleSearchLocation} disabled={isSearching}>
-                  {isSearching ? "..." : "Search"}
-                </Button>
               </div>
+              {isSearching && <div className="text-xs text-muted-foreground mt-1">Searching...</div>}
               {searchResults.length > 0 && (
                 <div className="mt-2 flex flex-col gap-1 rounded-md border bg-background p-1 shadow-sm max-h-40 overflow-y-auto">
                   {searchResults.map((res, i) => (
