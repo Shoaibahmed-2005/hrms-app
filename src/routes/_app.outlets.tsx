@@ -26,6 +26,7 @@ function OutletsPage() {
   
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [fetchingLocation, setFetchingLocation] = useState(false);
   
   const [form, setForm] = useState({
     name: "",
@@ -98,6 +99,32 @@ function OutletsPage() {
     }
   }
 
+  function handleFetchLocation() {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
+      return;
+    }
+    
+    setFetchingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setForm({
+          ...form,
+          latitude: position.coords.latitude.toFixed(6),
+          longitude: position.coords.longitude.toFixed(6)
+        });
+        setFetchingLocation(false);
+        toast.success("Location fetched successfully");
+      },
+      (error) => {
+        console.error(error);
+        setFetchingLocation(false);
+        toast.error("Could not fetch location. Please ensure location permissions are granted.");
+      },
+      { enableHighAccuracy: true }
+    );
+  }
+
   async function toggleStatus(outlet: Outlet) {
     try {
       await setOutletActive(outlet.id, !outlet.active);
@@ -158,6 +185,19 @@ function OutletsPage() {
                 />
               </div>
             </div>
+            
+            <Button 
+              type="button" 
+              variant="secondary" 
+              size="sm" 
+              className="w-full text-xs" 
+              onClick={handleFetchLocation}
+              disabled={fetchingLocation}
+            >
+              <MapPin className="mr-1.5 h-3.5 w-3.5" />
+              {fetchingLocation ? "Detecting location..." : "Fetch Current Location"}
+            </Button>
+
             <div className="space-y-1.5">
               <Label>Geofence Radius (meters)</Label>
               <Input
