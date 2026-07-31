@@ -836,7 +836,7 @@ function EmployeesPage() {
                       + Rs {employee.fixedBonus.toLocaleString("en-IN")} bonus
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button size="icon" variant="ghost" className="h-8 w-8">
