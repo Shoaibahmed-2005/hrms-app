@@ -92,8 +92,8 @@ export async function getDescriptorFromVideo(
 function detectFaces(video: HTMLVideoElement) {
   const mobile = isMobileDevice();
   const options = new faceapi.TinyFaceDetectorOptions({
-    inputSize: mobile ? 224 : 320,
-    scoreThreshold: mobile ? 0.5 : 0.55,
+    inputSize: mobile ? 128 : 224,
+    scoreThreshold: 0.5,
   });
 
   return faceapi.detectAllFaces(video, options).withFaceLandmarks(true).withFaceDescriptors();

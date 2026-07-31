@@ -141,8 +141,8 @@ function AttendanceScannerPage() {
       navigator.hardwareConcurrency <= 4;
 
     return mobile
-      ? { facingMode: "user", width: { ideal: 480 }, height: { ideal: 640 } }
-      : { facingMode: "user", width: { ideal: 720 }, height: { ideal: 960 } };
+      ? { facingMode: "user", width: { ideal: 320 }, height: { ideal: 480 } }
+      : { facingMode: "user", width: { ideal: 480 }, height: { ideal: 640 } };
   }
 
   function stopCamera() {
