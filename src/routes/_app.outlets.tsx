@@ -202,6 +202,14 @@ function OutletsPage() {
                         ? outlet.latitude + ", " + outlet.longitude + " (" + outlet.geofence_radius_meters + "m radius)"
                         : "No coordinates set"}
                     </div>
+                    {outlet.device_secret && (
+                      <div className="mt-1 flex items-center gap-1.5 rounded bg-muted/50 px-1.5 py-0.5 text-xs">
+                        <span className="font-mono text-[10px] text-muted-foreground select-all">
+                          {outlet.device_secret}
+                        </span>
+                        <span className="text-[10px] uppercase text-muted-foreground">Device Secret</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

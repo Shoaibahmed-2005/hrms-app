@@ -1590,17 +1590,40 @@ export type Outlet = {
   longitude: number | null;
   geofence_radius_meters: number;
   active: boolean;
+  device_secret?: string; // Automatically populated
 };
 
 export async function fetchOutlets(includeInactive = false) {
   if (!supabase) return [];
-  let query = supabase.from("outlets").select("*").order("name");
+  let query = supabase.from("outlets").select("*, kiosk_devices(device_secret)");
   if (!includeInactive) {
     query = query.eq("active", true);
   }
-  const { data, error } = await query;
+  const { data, error } = await query.order("name");
   if (error) throw error;
-  return data as Outlet[];
+  
+  const mapped = await Promise.all(data.map(async (row: any) => {
+    let secret = row.kiosk_devices?.[0]?.device_secret;
+    // Auto-create a device if none exists for this outlet
+    if (!secret && supabase) {
+      const { data: newDevice } = await supabase
+        .from("kiosk_devices")
+        .insert({ outlet_id: row.id, name: `${row.name} Main Kiosk` })
+        .select("device_secret")
+        .single();
+      if (newDevice) secret = newDevice.device_secret;
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      geofence_radius_meters: row.geofence_radius_meters,
+      active: row.active,
+      device_secret: secret
+    } as Outlet;
+  }));
+  return mapped;
 }
 
 export async function createOutlet(outlet: Partial<Outlet>) {
