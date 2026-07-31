@@ -28,6 +28,10 @@ function OutletsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fetchingLocation, setFetchingLocation] = useState(false);
   
+  const [locationSearch, setLocationSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  
   const [form, setForm] = useState({
     name: "",
     latitude: "",
@@ -125,6 +129,32 @@ function OutletsPage() {
     );
   }
 
+  async function handleSearchLocation() {
+    if (!locationSearch.trim()) return;
+    setIsSearching(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationSearch)}&limit=5`);
+      const data = await res.json();
+      setSearchResults(data);
+      if (data.length === 0) toast.error("No results found");
+    } catch (e) {
+      toast.error("Error searching location");
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
+  function selectSearchResult(result: any) {
+    setForm({
+      ...form,
+      latitude: parseFloat(result.lat).toFixed(6),
+      longitude: parseFloat(result.lon).toFixed(6)
+    });
+    setSearchResults([]);
+    setLocationSearch("");
+    toast.success("Coordinates updated from search");
+  }
+
   async function toggleStatus(outlet: Outlet) {
     try {
       await setOutletActive(outlet.id, !outlet.active);
@@ -163,6 +193,35 @@ function OutletsPage() {
                 required
               />
             </div>
+            <div className="space-y-1.5 rounded-lg border border-border p-3 bg-muted/20">
+              <Label className="text-xs">Search for an Address (Optional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={locationSearch}
+                  onChange={(e) => setLocationSearch(e.target.value)}
+                  placeholder="e.g. T Nagar, Chennai"
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleSearchLocation())}
+                />
+                <Button type="button" variant="secondary" onClick={handleSearchLocation} disabled={isSearching}>
+                  {isSearching ? "..." : "Search"}
+                </Button>
+              </div>
+              {searchResults.length > 0 && (
+                <div className="mt-2 flex flex-col gap-1 rounded-md border bg-background p-1 shadow-sm max-h-40 overflow-y-auto">
+                  {searchResults.map((res, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => selectSearchResult(res)}
+                      className="text-left text-xs p-2 hover:bg-muted rounded transition-colors"
+                    >
+                      {res.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Latitude</Label>
