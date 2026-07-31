@@ -139,8 +139,8 @@ function OutletsPage() {
     setIsSearching(true);
     const timeoutId = setTimeout(async () => {
       try {
-        // Restrict to India and prefer South India (Tamil Nadu approx viewbox)
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&viewbox=76.15,13.8,80.35,8.08&limit=5`);
+        // Restrict to India, prefer South India (viewbox), and force English results
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&viewbox=76.15,13.8,80.35,8.08&accept-language=en&limit=5`);
         const data = await res.json();
         setSearchResults(data);
       } catch (e) {
