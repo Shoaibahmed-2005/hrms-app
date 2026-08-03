@@ -53,15 +53,22 @@ function PayrollPage() {
     load();
   }, [load]);
 
+  const activeRows = useMemo(() => {
+    if (selectedId) {
+      return rows.filter(r => r.employeeId === selectedId);
+    }
+    return rows;
+  }, [rows, selectedId]);
+
   const totals = useMemo(
     () => ({
-      net: rows.reduce((sum, row) => sum + row.net, 0),
-      overtime: rows.reduce((sum, row) => sum + row.overtime, 0),
-      bonus: rows.reduce((sum, row) => sum + row.bonus, 0),
-      deductions: rows.reduce((sum, row) => sum + row.deductions, 0),
-      incentives: rows.reduce((sum, row) => sum + (row.incentives || 0), 0),
+      net: activeRows.reduce((sum, row) => sum + row.net, 0),
+      overtime: activeRows.reduce((sum, row) => sum + row.overtime, 0),
+      bonus: activeRows.reduce((sum, row) => sum + row.bonus, 0),
+      deductions: activeRows.reduce((sum, row) => sum + row.deductions, 0),
+      incentives: activeRows.reduce((sum, row) => sum + (row.incentives || 0), 0),
     }),
-    [rows],
+    [activeRows],
   );
   const filteredRows = useMemo(
     () =>
@@ -122,6 +129,11 @@ function PayrollPage() {
         description="Search an employee, review their pay evaluation, and generate their requested salary report."
         actions={
           <>
+            {selected && (
+              <Button size="sm" variant="ghost" onClick={() => setSelectedId(null)}>
+                Clear Selection
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={exportCsv} disabled={!selected}>
               <Download className="mr-1.5 h-4 w-4" />
               CSV
@@ -208,7 +220,7 @@ function PayrollPage() {
           label="Total payout"
           value={
             selected
-              ? `Rs ${selected.net.toLocaleString("en-IN")}`
+              ? `Rs ${totals.net.toLocaleString("en-IN")}`
               : `Rs ${(totals.net / 100000).toFixed(2)}L`
           }
           icon={Wallet}
