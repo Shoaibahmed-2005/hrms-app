@@ -65,7 +65,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { downloadCSV } from "@/lib/csv";
-import { getDescriptorFromVideo, loadFaceModels } from "@/lib/face";
+import { getDescriptorFromVideo, loadFaceModels, euclidean, MATCH_THRESHOLD } from "@/lib/face";
 
 export const Route = createFileRoute("/_app/employees")({
   head: () => ({ meta: [{ title: "Employees - Cleans HRMS" }] }),
@@ -333,6 +333,24 @@ function EmployeesPage() {
   async function saveFace() {
     const employeeId = savedEmployeeId ?? editing?.id;
     if (!employeeId || !faceDescriptor) return;
+    
+    // Prevent duplicate registrations
+    try {
+      const registry = await fetchFaceRegistry();
+      for (const entry of registry) {
+        if (!entry.descriptor || entry.employee_id === employeeId) continue;
+        const distance = euclidean(faceDescriptor, entry.descriptor);
+        if (distance < MATCH_THRESHOLD) {
+          toast.error("This face is already registered to another employee. Please contact an admin if this is a mistake.");
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to verify face uniqueness", e);
+      toast.error("Failed to verify face uniqueness. Please try again.");
+      return;
+    }
+
     try {
       await saveEmployeeFaceDescriptor(employeeId, faceDescriptor);
       if (capturedImage) {

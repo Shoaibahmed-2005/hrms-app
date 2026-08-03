@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,14 +16,22 @@ import { MobileSidebar } from "@/components/app-sidebar";
 
 export function AppTopbar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, signOut } = useAuth();
+  
+  const isDashboard = location.pathname === "/_app" || location.pathname === "/_app/dashboard";
+
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur-md md:px-6">
       <MobileSidebar />
-      <div className="relative flex-1 max-w-md">
-        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search employees, attendance, payroll..." className="h-9 pl-8" />
-      </div>
+      {isDashboard ? (
+        <div className="relative flex-1 max-w-md">
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search employees, attendance, payroll..." className="h-9 pl-8" />
+        </div>
+      ) : (
+        <div className="flex-1" />
+      )}
       <div className="ml-auto flex items-center gap-1">
         <ThemeToggle />
         <DropdownMenu>

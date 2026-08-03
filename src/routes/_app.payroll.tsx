@@ -102,7 +102,7 @@ function PayrollPage() {
         reason: incentiveForm.reason,
         amount: Number(incentiveForm.amount),
         month: startDate.slice(0, 7),
-        createdBy: user?.name || "Manager"
+        createdBy: user?.id || ""
       });
       toast.success("Manual incentive added");
       setIncentiveOpen(false);

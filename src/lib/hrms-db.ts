@@ -2033,8 +2033,7 @@ export async function fetchIncentives(startDate: string, endDate: string) {
   const { data, error } = await supabase
     .from("incentives")
     .select("*")
-    .gte("created_at", startDate + "T00:00:00")
-    .lte("created_at", endDate + "T23:59:59");
+    .eq("month", startDate.slice(0, 7));
   if (error) throw error;
   return data as unknown as IncentiveRow[];
 }
@@ -2047,7 +2046,7 @@ export async function saveIncentive(payload: { employeeId: string; type: string;
     reason: payload.reason,
     amount: payload.amount,
     month: payload.month,
-    created_by: payload.createdBy
+    created_by: payload.createdBy || null
   });
   if (error) throw error;
 }
