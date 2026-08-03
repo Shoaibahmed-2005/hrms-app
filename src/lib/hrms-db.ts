@@ -626,7 +626,9 @@ function calculatePayrollRows(
         const missingHours = Math.max(0, expectedHours - regularHours);
         const designationRule = deductions.find(d => d.designation === employee.role);
         const customDeductionRate = designationRule ? designationRule.absentDayDeduction : 0;
-        const deductionRate = customDeductionRate > 0 ? customDeductionRate : hourlyRate;
+        // customDeductionRate is a daily penalty, so we divide by payableHoursPerDay for the hourly equivalent
+        const customHourlyDeductionRate = customDeductionRate > 0 ? customDeductionRate / payableHoursPerDay : 0;
+        const deductionRate = customHourlyDeductionRate > 0 ? customHourlyDeductionRate : hourlyRate;
         const hourlyDeduction = missingHours * deductionRate;
 
         let automatedIncentive = 0;
@@ -641,7 +643,11 @@ function calculatePayrollRows(
         const totalIncentives = automatedIncentive + employeeManualIncentives;
 
         const overtime = overtimeHours * hourlyRate * settings.overtimeMultiplier;
-        const net = Math.max(0, expectedBase - hourlyDeduction + overtime + bonus + totalIncentives);
+        
+        // Penalties/deductions for absence should only eat into the base pay.
+        // Overtime, bonuses, and manual incentives are guaranteed additions.
+        const earnedBase = Math.max(0, expectedBase - hourlyDeduction);
+        const net = earnedBase + overtime + bonus + totalIncentives;
 
         return {
           workedDays, absentDays, regularHours, overtimeHours,
