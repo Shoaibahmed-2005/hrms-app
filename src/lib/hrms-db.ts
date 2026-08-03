@@ -680,7 +680,7 @@ function calculatePayrollRows(
         incentives: localMetrics.incentives,
         deductions: localMetrics.deductions,
         net: localMetrics.net,
-        status: allRows.some((row) => !row.check_out) ? "Open" : "Calculated",
+        status: allRows.some((row) => !row.check_out) ? "Ongoing" : "Calculated",
 
         globalRegularHours: globalMetrics.regularHours,
         globalOvertimeHours: globalMetrics.overtimeHours,
