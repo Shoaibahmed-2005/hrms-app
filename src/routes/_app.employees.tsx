@@ -351,22 +351,22 @@ function EmployeesPage() {
     const employeeId = savedEmployeeId ?? editing?.id;
     if (!employeeId || !faceDescriptor) return;
     
-    // Prevent duplicate registrations
-    try {
-      const registry = await fetchFaceRegistry();
-      for (const entry of registry) {
-        if (!entry.descriptor || entry.employeeId === employeeId) continue;
-        const distance = euclidean(faceDescriptor, entry.descriptor);
-        if (distance < MATCH_THRESHOLD) {
-          toast.error("This face is already registered to another employee. Please contact an admin if this is a mistake.");
-          return;
-        }
-      }
-    } catch (e) {
-      console.error("Failed to verify face uniqueness", e);
-      toast.error("Failed to verify face uniqueness. Please try again.");
-      return;
-    }
+    // Commenting out duplicate prevention so you can test multiple accounts with your own face:
+    // try {
+    //   const registry = await fetchFaceRegistry();
+    //   for (const entry of registry) {
+    //     if (!entry.descriptor || entry.employeeId === employeeId) continue;
+    //     const distance = euclidean(faceDescriptor, entry.descriptor);
+    //     if (distance < MATCH_THRESHOLD) {
+    //       toast.error("This face is already registered to another employee. Please contact an admin if this is a mistake.");
+    //       return;
+    //     }
+    //   }
+    // } catch (e) {
+    //   console.error("Failed to verify face uniqueness", e);
+    //   toast.error("Failed to verify face uniqueness. Please try again.");
+    //   return;
+    // }
 
     try {
       await saveEmployeeFaceDescriptor(employeeId, faceDescriptor);
@@ -378,8 +378,9 @@ function EmployeesPage() {
       setOpen(false);
       resetForm();
       void loadEmployees(); // Reload to show updated profile image
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save face");
+    } catch (e: any) {
+      console.error("Save face error:", e);
+      toast.error(e?.message || e?.details || "Could not save face: " + JSON.stringify(e));
     }
   }
 
