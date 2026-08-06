@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,9 @@ import { downloadCSV } from "@/lib/csv";
 import { getDescriptorFromVideo, loadFaceModels, euclidean, MATCH_THRESHOLD } from "@/lib/face";
 
 export const Route = createFileRoute("/_app/employees")({
+  validateSearch: z.object({
+    edit: z.string().optional(),
+  }),
   head: () => ({ meta: [{ title: "Employees - Cleans HRMS" }] }),
   component: EmployeesPage,
 });
@@ -76,6 +80,7 @@ type CamState = "idle" | "loading" | "streaming" | "captured";
 
 function EmployeesPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const [employees, setEmployees] = useState<DbEmployee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [designations, setDesignations] = useState<Designation[]>([]);
@@ -144,6 +149,18 @@ function EmployeesPage() {
     void loadEmployees();
     return () => stopCamera();
   }, []);
+
+  // Handle deep-link to edit an employee
+  useEffect(() => {
+    if (search.edit && employees.length > 0) {
+      const emp = employees.find(e => e.id === search.edit);
+      if (emp && !editing && !open) {
+        startEdit(emp);
+        // Clear the search param so it doesn't re-trigger
+        navigate({ search: {}, replace: true });
+      }
+    }
+  }, [search.edit, employees, editing, open, navigate]);
 
   // Poll face detection in preview
   useEffect(() => {
@@ -338,7 +355,7 @@ function EmployeesPage() {
     try {
       const registry = await fetchFaceRegistry();
       for (const entry of registry) {
-        if (!entry.descriptor || entry.employee_id === employeeId) continue;
+        if (!entry.descriptor || entry.employeeId === employeeId) continue;
         const distance = euclidean(faceDescriptor, entry.descriptor);
         if (distance < MATCH_THRESHOLD) {
           toast.error("This face is already registered to another employee. Please contact an admin if this is a mistake.");

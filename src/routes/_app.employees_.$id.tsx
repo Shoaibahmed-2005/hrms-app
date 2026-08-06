@@ -47,7 +47,13 @@ function EmployeeProfile() {
       <PageHeader
         title={employee.name}
         description={`${employee.role} - ${employee.department}`}
-        actions={<Button size="sm">Edit profile</Button>}
+        actions={
+          <Button size="sm" asChild>
+            <Link to="/_app/employees" search={{ edit: employee.id }}>
+              Edit profile
+            </Link>
+          </Button>
+        }
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
