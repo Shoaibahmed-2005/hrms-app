@@ -351,22 +351,22 @@ function EmployeesPage() {
     const employeeId = savedEmployeeId ?? editing?.id;
     if (!employeeId || !faceDescriptor) return;
     
-    // Commenting out duplicate prevention so you can test multiple accounts with your own face:
-    // try {
-    //   const registry = await fetchFaceRegistry();
-    //   for (const entry of registry) {
-    //     if (!entry.descriptor || entry.employeeId === employeeId) continue;
-    //     const distance = euclidean(faceDescriptor, entry.descriptor);
-    //     if (distance < MATCH_THRESHOLD) {
-    //       toast.error("This face is already registered to another employee. Please contact an admin if this is a mistake.");
-    //       return;
-    //     }
-    //   }
-    // } catch (e) {
-    //   console.error("Failed to verify face uniqueness", e);
-    //   toast.error("Failed to verify face uniqueness. Please try again.");
-    //   return;
-    // }
+    // Prevent duplicate registrations
+    try {
+      const registry = await fetchFaceRegistry();
+      for (const entry of registry) {
+        if (!entry.descriptor || entry.employeeId === employeeId) continue;
+        const distance = euclidean(faceDescriptor, entry.descriptor);
+        if (distance < MATCH_THRESHOLD) {
+          toast.error("This face is already registered to another employee. Please contact an admin if this is a mistake.");
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to verify face uniqueness", e);
+      toast.error("Failed to verify face uniqueness. Please try again.");
+      return;
+    }
 
     try {
       await saveEmployeeFaceDescriptor(employeeId, faceDescriptor);
