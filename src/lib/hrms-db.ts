@@ -1307,7 +1307,7 @@ export async function fetchFaceRegistry() {
       updated_at: string;
     }>
   )
-    .filter((row) => row.employee_id && Array.isArray(row.descriptor))
+    .filter((row) => row.employee_id && Array.isArray(row.descriptor) && row.descriptor.length > 0)
     .map((row) => {
       const employee = employeeById.get(row.employee_id!);
       return {
