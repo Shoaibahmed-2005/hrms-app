@@ -49,7 +49,7 @@ function EmployeeProfile() {
         description={`${employee.role} - ${employee.department}`}
         actions={
           <Button size="sm" asChild>
-            <Link to="/_app/employees" search={{ edit: employee.id }}>
+            <Link to="/employees" search={{ edit: employee.id }}>
               Edit profile
             </Link>
           </Button>
