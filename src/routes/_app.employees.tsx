@@ -336,7 +336,7 @@ function EmployeesPage() {
 
       const descriptor = await getDescriptorFromVideo(videoRef.current);
       if (!descriptor) throw new Error("No face detected — improve lighting and get closer");
-      setFaceDescriptor(Array.from(descriptor));
+      setFaceDescriptor(descriptor.descriptor);
       setCamState("captured");
       stopCamera();
       toast.success("Face captured! Click 'Save face' to register.");
