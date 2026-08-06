@@ -278,7 +278,7 @@ function AttendanceManagementPage() {
                 const displaySessions = sessions.filter((s, i) =>
                   s.checkOut !== "-" ? true : i === sessions.length - 1
                 );
-                const hasMultipleSessions = displaySessions.length > 1;
+                const hasMultipleSessions = displaySessions.length > 0;
 
                 const rows: JSX.Element[] = [];
 
