@@ -927,6 +927,11 @@ export async function deleteDepartment(id: string) {
 
 export async function deleteEmployee(id: string) {
   if (!supabase) throw new Error("Supabase is not configured");
+  
+  // Explicitly delete related records to prevent orphans if ON DELETE CASCADE is missing
+  await supabase.from("face_descriptors").delete().eq("employee_id", id);
+  await supabase.from("attendance_sessions").delete().eq("employee_id", id);
+  
   const { error } = await supabase.from("employees").delete().eq("id", id);
   if (error) throw error;
 }
